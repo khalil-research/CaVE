@@ -16,7 +16,7 @@ from pyepo.model.opt import optModel
 
 class exactConeAlignedCosine(nn.Module):
     """
-    A autograd module for cosine similarity loss to align cone and vector
+    A autograd module to align cone and vector with exact cosine similarity loss
     """
 
     def __init__(self, optmodel):
@@ -98,3 +98,132 @@ class exactConeAlignedCosine(nn.Module):
         # get normalized projection
         proj = torch.FloatTensor(λ_norm @ ctr)
         return proj
+
+
+class baseVectConeAlignedCosine(nn.Module):
+    """
+    A autograd module to align cone and vector cosine similarity loss via vase vectors
+    """
+
+    def __init__(self, optmodel):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+        """
+        super().__init__()
+        # optimization model
+        if not isinstance(optmodel, optModel):
+            raise TypeError("arg model is not an optModel")
+        self.optmodel = optmodel
+
+    def forward(self, pred_cost, tight_ctrs, reduction="mean"):
+        """
+        Forward pass
+        """
+        loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
+        # reduction
+        if reduction == "mean":
+            loss = torch.mean(loss)
+        elif reduction == "sum":
+            loss = torch.sum(loss)
+        elif reduction == "none":
+            loss = loss
+        else:
+            raise ValueError("No reduction '{}'.".format(reduction))
+        return loss
+
+    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+        """
+        A method to calculate loss
+        """
+        # get device
+        device = pred_cost.device
+        # get batch size
+        batch_size = len(pred_cost)
+        # init loss
+        loss = torch.empty(batch_size).to(device)
+        # cost vectors direction
+        if optmodel.modelSense == EPO.MINIMIZE:
+            # minimize
+            pred_cost = - pred_cost
+        # constraints to numpy
+        tight_ctrs = tight_ctrs.detach()
+        for i in range(batch_size):
+            # calculate cosine similarity
+            loss[i] = - torch.max(F.cosine_similarity(pred_cost[i].unsqueeze(0),
+                                                      tight_ctrs[i])
+                        )
+        return loss
+
+
+class samplingConeAlignedCosine(nn.Module):
+    """
+    A autograd module to align cone and vector cosine similarity loss from sampling
+    """
+
+    def __init__(self, optmodel, n_samples=10):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+        """
+        super().__init__()
+        # optimization model
+        if not isinstance(optmodel, optModel):
+            raise TypeError("arg model is not an optModel")
+        self.optmodel = optmodel
+        self.n_samples = n_samples
+
+    def forward(self, pred_cost, tight_ctrs, reduction="mean"):
+        """
+        Forward pass
+        """
+        loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
+        # reduction
+        if reduction == "mean":
+            loss = torch.mean(loss)
+        elif reduction == "sum":
+            loss = torch.sum(loss)
+        elif reduction == "none":
+            loss = loss
+        else:
+            raise ValueError("No reduction '{}'.".format(reduction))
+        return loss
+
+    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+        """
+        A method to calculate loss
+        """
+        # get device
+        device = pred_cost.device
+        # get batch size
+        batch_size = len(pred_cost)
+        # init loss
+        loss = torch.empty(batch_size).to(device)
+        # cost vectors direction
+        if optmodel.modelSense == EPO.MINIMIZE:
+            # minimize
+            pred_cost = - pred_cost
+        # constraints to numpy
+        tight_ctrs = tight_ctrs.cpu().detach().numpy()
+        for i in range(batch_size):
+            # get samples
+            vecs = self._getSamples(tight_ctrs[i])
+            # calculate cosine similarity
+            loss[i] = - torch.max(F.cosine_similarity(pred_cost[i].unsqueeze(0),
+                                                      vecs)
+                        )
+        return loss
+
+    def _getSamples(self, ctr):
+        """
+        A method to sample vectors from rays of cone
+        """
+        # get solutions
+        λ_val = np.random.rand(self.n_samples, len(ctr))
+        # append base vectors
+        #λ_val = np.concatenate(λ_val, ctr)
+        # normalize
+        λ_norm = λ_val / np.linalg.norm(λ_val, axis=1, keepdims=True)
+        # get normalized projection
+        vecs = torch.FloatTensor(λ_norm @ ctr)
+        return vecs
