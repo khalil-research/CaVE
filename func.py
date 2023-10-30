@@ -64,9 +64,11 @@ class exactConeAlignedCosine(nn.Module):
         tight_ctrs = tight_ctrs.cpu().detach().numpy()
         for i in range(batch_size):
             # get projection
-            p = self._getProjection(pred_cost[i], tight_ctrs[i])
+            p = self._getProjection(pred_cost[i],
+                                    np.unique(tight_ctrs[i], axis=0))
             # calculate cosine similarity
-            loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0), p.unsqueeze(0))
+            loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
+                                            p.unsqueeze(0))
         return loss
 
     def _getProjection(self, cp, ctr):
@@ -146,13 +148,11 @@ class baseVectConeAlignedCosine(nn.Module):
         if optmodel.modelSense == EPO.MINIMIZE:
             # minimize
             pred_cost = - pred_cost
-        # constraints to numpy
-        tight_ctrs = tight_ctrs.detach()
-        for i in range(batch_size):
-            # calculate cosine similarity
-            loss[i] = - torch.max(F.cosine_similarity(pred_cost[i].unsqueeze(0),
-                                                      tight_ctrs[i])
-                        )
+        # calculate cosine similarity
+        cos_sim = F.cosine_similarity(pred_cost.unsqueeze(1), tight_ctrs, dim=2)
+        # get max cosine similarity for each sample
+        max_cos_sim, _ = torch.max(cos_sim, dim=1)
+        loss = - max_cos_sim
         return loss
 
 
@@ -203,27 +203,23 @@ class samplingConeAlignedCosine(nn.Module):
         if optmodel.modelSense == EPO.MINIMIZE:
             # minimize
             pred_cost = - pred_cost
-        # constraints to numpy
-        tight_ctrs = tight_ctrs.cpu().detach().numpy()
-        for i in range(batch_size):
-            # get samples
-            vecs = self._getSamples(tight_ctrs[i])
-            # calculate cosine similarity
-            loss[i] = - torch.max(F.cosine_similarity(pred_cost[i].unsqueeze(0),
-                                                      vecs)
-                        )
+        # get samples
+        vecs = self._getSamples(tight_ctrs.cpu().detach().numpy())
+        # calculate cosine similarity
+        cos_sim = F.cosine_similarity(pred_cost.unsqueeze(1), vecs, dim=2)
+        # get max cosine similarity for each sample
+        max_cos_sim, _ = torch.max(cos_sim, dim=1)
+        loss = - max_cos_sim
         return loss
 
-    def _getSamples(self, ctr):
+    def _getSamples(self, ctrs):
         """
         A method to sample vectors from rays of cone
         """
         # get solutions
-        λ_val = np.random.rand(self.n_samples, len(ctr))
-        # append base vectors
-        #λ_val = np.concatenate(λ_val, ctr)
+        λ_val = np.random.rand(ctrs.shape[0], self.n_samples, ctrs.shape[1])
         # normalize
-        λ_norm = λ_val / np.linalg.norm(λ_val, axis=1, keepdims=True)
+        λ_norm = λ_val / np.linalg.norm(λ_val, axis=2, keepdims=True)
         # get normalized projection
-        vecs = torch.FloatTensor(λ_norm @ ctr)
+        vecs = torch.FloatTensor(λ_norm @ ctrs)
         return vecs
