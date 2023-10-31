@@ -117,9 +117,9 @@ class optDatasetConstrs(Dataset):
         # copy model
         model = self.model.copy()
         # fix value
-        for i, k in enumerate(self.model.x):
-            model.x[k].lb = sol[i]
-            model.x[k].ub = sol[i]
+        for i, var_x in enumerate(model._model.getVars()):
+            var_x.lb = sol[i]
+            var_x.ub = sol[i]
         # set 0 obj
         model._model.setObjective(0)
         # solve
