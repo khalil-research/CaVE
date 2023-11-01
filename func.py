@@ -91,7 +91,6 @@ class exactConeAlignedCosine(nn.Module):
         # focus on numeric problem
         m.Params.NumericFocus = 3
         # solve
-        m.update()
         m.optimize()
         # get solutions
         λ_val = np.array([λ[i].x for i in λ])
