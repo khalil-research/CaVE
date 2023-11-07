@@ -79,6 +79,9 @@ class exactConeAlignedCosine(nn.Module):
         m = gp.Model("projection")
         # turn off output
         m.Params.outputFlag = 0
+        # numerical precision
+        m.Params.FeasibilityTol = 1e-3
+        m.Params.OptimalityTol = 1e-3
         # varibles
         p = m.addVars(len(cp), name="x", lb=-GRB.INFINITY)
         λ = m.addVars(len(ctr), name="lambda")
