@@ -93,11 +93,11 @@ class exactConeAlignedCosine(nn.Module):
         # solve
         m.optimize()
         # get solutions
-        λ_val = np.array([λ[i].x for i in λ])
+        proj = np.array([p[i].x for i in p])
+        #λ_val = np.array([λ[i].x for i in λ])
+        #assert np.sum(np.abs(λ_val @ ctr - proj)) < 1e-3
         # normalize
-        λ_norm = λ_val / np.linalg.norm(λ_val)
-        # get normalized projection
-        proj = torch.FloatTensor(λ_norm @ ctr)
+        proj = torch.FloatTensor(proj / np.linalg.norm(proj))
         return proj
 
 
