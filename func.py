@@ -60,12 +60,12 @@ class exactConeAlignedCosine(nn.Module):
         if optmodel.modelSense == EPO.MINIMIZE:
             # minimize
             pred_cost = - pred_cost
-        # constraints to numpy
-        tight_ctrs = tight_ctrs.cpu().detach().numpy()
+        # to numpy
+        cp = pred_cost.detach().cpu().numpy()
+        ctrs = tight_ctrs.detach().cpu().numpy()
         for i in range(batch_size):
             # get projection
-            p = self._getProjection(pred_cost[i],
-                                    np.unique(tight_ctrs[i], axis=0))
+            p = self._getProjection(cp[i], np.unique(ctrs[i], axis=0))
             # calculate cosine similarity
             loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
                                             p.unsqueeze(0))
@@ -83,20 +83,19 @@ class exactConeAlignedCosine(nn.Module):
         m.Params.FeasibilityTol = 1e-3
         m.Params.OptimalityTol = 1e-3
         # varibles
-        p = m.addVars(len(cp), name="x", lb=-GRB.INFINITY)
-        λ = m.addVars(len(ctr), name="lambda")
-        # onjective function
-        obj = gp.quicksum((cp[i].item() - p[i]) ** 2 for i in range(len(cp)))
+        p = m.addMVar(len(cp), name="x", lb=-GRB.INFINITY)
+        λ = m.addMVar(len(ctr), name="λ")
+        # objective function
+        obj = (cp - p) @ (cp - p)
         m.setObjective(obj, GRB.MINIMIZE)
         # constraints
-        for i in range(len(cp)):
-            m.addConstr(gp.quicksum(ctr[j,i] * λ[j] for j in range(len(ctr))) == p[i])
+        m.addConstr(ctr.T @ λ == p)
         # focus on numeric problem
         m.Params.NumericFocus = 3
         # solve
         m.optimize()
         # get solutions
-        proj = np.array([p[i].x for i in p])
+        proj = np.array(p.X)
         #λ_val = np.array([λ[i].x for i in λ])
         #assert np.sum(np.abs(λ_val @ ctr - proj)) < 1e-3
         # normalize
