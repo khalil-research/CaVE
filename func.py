@@ -83,21 +83,16 @@ class exactConeAlignedCosine(nn.Module):
         m.Params.FeasibilityTol = 1e-3
         m.Params.OptimalityTol = 1e-3
         # varibles
-        p = m.addMVar(len(cp), name="x", lb=-GRB.INFINITY)
         λ = m.addMVar(len(ctr), name="λ")
         # objective function
-        obj = (cp - p) @ (cp - p)
+        obj = (cp - λ @ ctr) @ (cp - λ @ ctr)
         m.setObjective(obj, GRB.MINIMIZE)
-        # constraints
-        m.addConstr(ctr.T @ λ == p)
         # focus on numeric problem
         m.Params.NumericFocus = 3
         # solve
         m.optimize()
         # get solutions
-        proj = np.array(p.X)
-        #λ_val = np.array([λ[i].x for i in λ])
-        #assert np.sum(np.abs(λ_val @ ctr - proj)) < 1e-3
+        proj = np.array(λ.X) @ ctr
         # normalize
         proj = torch.FloatTensor(proj / np.linalg.norm(proj))
         return proj
