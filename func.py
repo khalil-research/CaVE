@@ -19,7 +19,7 @@ class exactConeAlignedCosine(nn.Module):
     A autograd module to align cone and vector with exact cosine similarity loss
     """
 
-    def __init__(self, optmodel):
+    def __init__(self, optmodel, warmstart=True):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
@@ -29,6 +29,7 @@ class exactConeAlignedCosine(nn.Module):
         if not isinstance(optmodel, optModel):
             raise TypeError("arg model is not an optModel")
         self.optmodel = optmodel
+        self.warmstart = warmstart
 
     def forward(self, pred_cost, tight_ctrs, reduction="mean"):
         """
@@ -65,7 +66,7 @@ class exactConeAlignedCosine(nn.Module):
         ctrs = tight_ctrs.detach().cpu().numpy()
         for i in range(batch_size):
             # get projection
-            p = self._getProjection(cp[i], np.unique(ctrs[i], axis=0))
+            p = self._getProjection(cp[i], ctrs[i])
             # calculate cosine similarity
             loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
                                             p.unsqueeze(0))
@@ -84,6 +85,11 @@ class exactConeAlignedCosine(nn.Module):
         m.Params.OptimalityTol = 1e-3
         # varibles
         λ = m.addMVar(len(ctr), name="λ")
+        # warm-start
+        if self.warmstart:
+            init_λ = np.zeros(len(ctr))
+            init_λ[-len(cp):] = np.abs(cp) * (np.sign(cp) == np.sign(sign)) # hyperqudrants
+            λ.Start = init_λ
         # objective function
         obj = (cp - λ @ ctr) @ (cp - λ @ ctr)
         m.setObjective(obj, GRB.MINIMIZE)
