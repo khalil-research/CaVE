@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
+from scipy.optimize import nnls
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -132,6 +133,53 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # normalize
         proj = torch.FloatTensor(proj / np.linalg.norm(proj))
         return proj
+
+
+class nnlsConeAlignedCosine(abstractConeAlignedCosine):
+    """
+    A autograd module to align cone and vector with non-negative least squares
+    """
+    def __init__(self, optmodel, warmstart=True):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+        """
+        super().__init__(optmodel)
+        self.warmstart = warmstart
+
+    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+        """
+        A method to calculate loss
+        """
+        # get device
+        device = pred_cost.device
+        # get batch size
+        batch_size = len(pred_cost)
+        # init loss
+        loss = torch.empty(batch_size).to(device)
+        # cost vectors direction
+        if optmodel.modelSense == EPO.MINIMIZE:
+            # minimize
+            pred_cost = - pred_cost
+        # to numpy
+        cp = pred_cost.detach().cpu().numpy()
+        ctrs = tight_ctrs.detach().cpu().numpy()
+        for i in range(batch_size):
+            # get projection
+            p = self._getProjection(cp[i], ctrs[i])
+            # calculate cosine similarity
+            loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
+                                            p.unsqueeze(0))
+        return loss
+
+    def _getProjection(self, cp, ctr):
+        # solve the linear equations
+        λ, _ = nnls(ctr.T, cp)
+        # get projection
+        proj = λ @ ctr
+        # normalize
+        proj = proj / np.linalg.norm(proj)
+        return torch.FloatTensor(proj)
 
 
 class samplingConeAlignedCosine(abstractConeAlignedCosine):
