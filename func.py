@@ -33,7 +33,7 @@ class abstractConeAlignedCosine(nn.Module, ABC):
 
     def forward(self, pred_cost, tight_ctrs, reduction="mean"):
         """
-        Abstract forward pass method.
+        Forward pass method.
         """
         loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
         # reduction
@@ -53,6 +53,15 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         Abstract method to calculate loss.
         """
         pass
+
+#    def _checkInCone(self, cp, ctr):
+#        """
+#        Method to check if the given cost vector in the cone
+#        """
+#        # solve the linear system ctr.T λ = cp
+#        λ, _, _, _ = np.linalg.lstsq(ctr.T, cp, rcond=None)
+#        # check λ >= 0
+#        return np.all(λ >= 0) and np.allclose(λ @ ctr, cp)
 
 
 class exactConeAlignedCosine(abstractConeAlignedCosine):
