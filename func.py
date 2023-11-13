@@ -4,6 +4,8 @@
 A autograd module for cone-aligned loss
 """
 
+from abc import ABC, abstractmethod
+
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
@@ -14,26 +16,24 @@ from torch.nn import functional as F
 from pyepo import EPO
 from pyepo.model.opt import optModel
 
-class exactConeAlignedCosine(nn.Module):
+class abstractConeAlignedCosine(nn.Module, ABC):
     """
-    A autograd module to align cone and vector with exact cosine similarity loss
+    Abstract base class for cone-aligned cosine loss modules.
     """
-
-    def __init__(self, optmodel, warmstart=True):
+    def __init__(self, optmodel):
         """
+        Initialize the abstract class with an optimization model.
         Args:
             optmodel (optModel): an PyEPO optimization model
         """
         super().__init__()
-        # optimization model
         if not isinstance(optmodel, optModel):
             raise TypeError("arg model is not an optModel")
         self.optmodel = optmodel
-        self.warmstart = warmstart
 
     def forward(self, pred_cost, tight_ctrs, reduction="mean"):
         """
-        Forward pass
+        Abstract forward pass method.
         """
         loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
         # reduction
@@ -46,6 +46,26 @@ class exactConeAlignedCosine(nn.Module):
         else:
             raise ValueError("No reduction '{}'.".format(reduction))
         return loss
+
+    @abstractmethod
+    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+        """
+        Abstract method to calculate loss.
+        """
+        pass
+
+
+class exactConeAlignedCosine(abstractConeAlignedCosine):
+    """
+    A autograd module to align cone and vector with exact cosine similarity loss
+    """
+    def __init__(self, optmodel, warmstart=True):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+        """
+        super().__init__(optmodel)
+        self.warmstart = warmstart
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
@@ -88,6 +108,7 @@ class exactConeAlignedCosine(nn.Module):
         # warm-start
         if self.warmstart:
             init_λ = np.zeros(len(ctr))
+            sign = ctr[-len(cp):].sum(axis=0)
             init_λ[-len(cp):] = np.abs(cp) * (np.sign(cp) == np.sign(sign)) # hyperqudrants
             λ.Start = init_λ
         # objective function
@@ -104,38 +125,17 @@ class exactConeAlignedCosine(nn.Module):
         return proj
 
 
-class samplingConeAlignedCosine(nn.Module):
+class samplingConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss from sampling
     """
-
     def __init__(self, optmodel, n_samples=10):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
         """
-        super().__init__()
-        # optimization model
-        if not isinstance(optmodel, optModel):
-            raise TypeError("arg model is not an optModel")
-        self.optmodel = optmodel
+        super().__init__(optmodel)
         self.n_samples = n_samples
-
-    def forward(self, pred_cost, tight_ctrs, reduction="mean"):
-        """
-        Forward pass
-        """
-        loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
-        # reduction
-        if reduction == "mean":
-            loss = torch.mean(loss)
-        elif reduction == "sum":
-            loss = torch.sum(loss)
-        elif reduction == "none":
-            loss = loss
-        else:
-            raise ValueError("No reduction '{}'.".format(reduction))
-        return loss
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
@@ -173,38 +173,10 @@ class samplingConeAlignedCosine(nn.Module):
         return vecs
 
 
-class signConeAlignedCosine(nn.Module):
+class signConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to quickly align vector to the subset (hyperquadrant) of cone cosine similarity loss
     """
-
-    def __init__(self, optmodel):
-        """
-        Args:
-            optmodel (optModel): an PyEPO optimization model
-        """
-        super().__init__()
-        # optimization model
-        if not isinstance(optmodel, optModel):
-            raise TypeError("arg model is not an optModel")
-        self.optmodel = optmodel
-
-    def forward(self, pred_cost, tight_ctrs, reduction="mean"):
-        """
-        Forward pass
-        """
-        loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
-        # reduction
-        if reduction == "mean":
-            loss = torch.mean(loss)
-        elif reduction == "sum":
-            loss = torch.sum(loss)
-        elif reduction == "none":
-            loss = loss
-        else:
-            raise ValueError("No reduction '{}'.".format(reduction))
-        return loss
-
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
         A method to calculate loss
