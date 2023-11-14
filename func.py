@@ -106,6 +106,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A method to get the projection of the vector onto the polar cone via solving a quadratic programming
         """
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # ceate a model
         m = gp.Model("projection")
         # turn off output
@@ -173,6 +175,8 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         return loss
 
     def _getProjection(self, cp, ctr):
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # solve the linear equations
         λ, _ = nnls(ctr.T, cp)
         # get projection
