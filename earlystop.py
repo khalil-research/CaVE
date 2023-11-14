@@ -16,7 +16,7 @@ class earlyStopper:
         self.min_loss = np.inf
 
     def stop(self, loss):
-        if loss < self.min_loss + 1e-4:
+        if loss + 1e-4 < self.min_loss:
             self.min_loss = loss
             self.counter = 0
         else:
