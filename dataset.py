@@ -9,6 +9,7 @@ import time
 from gurobipy import GRB
 import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
@@ -64,9 +65,9 @@ class optDatasetConstrs(Dataset):
         for c in tqdm(self.costs):
             try:
                 # solve
-                sol = self._solve(c)
+                sol, model = self._solve(c)
                 # get constrs
-                constrs = self._getBindingConstrs(self.model._model)
+                constrs = self._getBindingConstrs(model)
             except:
                 raise ValueError(
                     "For optModel, the method 'solve' should return solution vector and objective value."
@@ -100,9 +101,13 @@ class optDatasetConstrs(Dataset):
         Returns:
             tuple: optimal solution (np.ndarray) and objective value (float)
         """
-        self.model.setObj(cost)
-        sol, _ = self.model.solve()
-        return sol
+        # copy model
+        model = self.model.copy()
+        # set obj
+        model.setObj(cost)
+        # optimize
+        sol, _ = model.solve()
+        return sol, model
 
     def _assignSol(self, sol):
         """
@@ -137,16 +142,22 @@ class optDatasetConstrs(Dataset):
         Returns:
             np.ndarray: normal vector of constraints
         """
-        xs = model.getVars()
+        xs = model._model.getVars()
         constrs = []
+        # if there is lazy constraints
+        if hasattr(model, "lazy_constrs"):
+            for constr in model.lazy_constrs:
+                model._model.addConstr(constr)
+        model._model.update()
+        model.solve()
         # iterate all constraints
-        for constr in model.getConstrs():
+        for constr in model._model.getConstrs():
             # check tight constraints
             if abs(constr.Slack) < 1e-5:
                 t_constr = []
                 # get coefficients
                 for x in xs:
-                    t_constr.append(model.getCoeff(constr, x))
+                    t_constr.append(model._model.getCoeff(constr, x))
                 # get coefficients in standard form
                 if constr.sense == GRB.LESS_EQUAL:
                     # <=
@@ -210,3 +221,14 @@ class optDatasetConstrs(Dataset):
                 torch.FloatTensor(self.sols[index]),
                 torch.FloatTensor(self.ctrs[index])
             )
+
+
+def collate_fn(batch):
+    # seperate data
+    x, c, w, t_ctrs = zip(*batch)
+    x = torch.stack(x, dim=0)
+    c = torch.stack(c, dim=0)
+    w = torch.stack(w, dim=0)
+    # pad
+    ctrs_padded = pad_sequence(t_ctrs, batch_first=True, padding_value=0)
+    return x, c, w, ctrs_padded
