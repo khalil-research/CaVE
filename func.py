@@ -55,27 +55,43 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         """
         pass
 
-#    def _checkInCone(self, cp, ctr):
-#        """
-#        Method to check if the given cost vector in the cone
-#        """
-#        # solve the linear system ctr.T λ = cp
-#        λ, _, _, _ = np.linalg.lstsq(ctr.T, cp, rcond=None)
-#        # check λ >= 0
-#        return np.all(λ >= 0) and np.allclose(λ @ ctr, cp)
+    def _checkInCone(self, cp, ctr):
+        """
+        Method to check if the given cost vector in the cone
+        """
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
+        # ceate a model
+        m = gp.Model("Cone Combination")
+        # turn off output
+        m.Params.outputFlag = 0
+        # numerical precision
+        m.Params.FeasibilityTol = 1e-3
+        m.Params.OptimalityTol = 1e-3
+        # varibles
+        λ = m.addMVar(len(ctr), name="λ")
+        # constraints
+        m.addConstr(λ @ ctr == cp)
+        # objective function
+        m.setObjective(0, GRB.MINIMIZE)
+        # solve the model
+        m.optimize()
+        # return the status of the model
+        return m.status == GRB.OPTIMAL
 
 
 class exactConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector with exact cosine similarity loss
     """
-    def __init__(self, optmodel, warmstart=True):
+    def __init__(self, optmodel, warmstart=True, conecheck=False):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
         """
         super().__init__(optmodel)
         self.warmstart = warmstart
+        self.conecheck = conecheck
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
@@ -95,8 +111,12 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         cp = pred_cost.detach().cpu().numpy()
         ctrs = tight_ctrs.detach().cpu().numpy()
         for i in range(batch_size):
-            # get projection
-            p = self._getProjection(cp[i], ctrs[i])
+            if self.conecheck and self._checkInCone(cp[i], ctrs[i]):
+                # in the cone
+                p = torch.FloatTensor(cp[i].copy())
+            else:
+                # get projection
+                p = self._getProjection(cp[i], ctrs[i])
             # calculate cosine similarity
             loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
                                             p.unsqueeze(0))
@@ -141,13 +161,13 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector with non-negative least squares
     """
-    def __init__(self, optmodel, warmstart=True):
+    def __init__(self, optmodel, conecheck=False):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
         """
         super().__init__(optmodel)
-        self.warmstart = warmstart
+        self.conecheck = conecheck
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
@@ -167,8 +187,12 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         cp = pred_cost.detach().cpu().numpy()
         ctrs = tight_ctrs.detach().cpu().numpy()
         for i in range(batch_size):
-            # get projection
-            p = self._getProjection(cp[i], ctrs[i])
+            if self.conecheck and self._checkInCone(cp[i], ctrs[i]):
+                # in the cone
+                p = torch.FloatTensor(cp[i].copy())
+            else:
+                # get projection
+                p = self._getProjection(cp[i], ctrs[i])
             # calculate cosine similarity
             loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
                                             p.unsqueeze(0))
