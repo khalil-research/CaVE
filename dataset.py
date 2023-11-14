@@ -129,7 +129,7 @@ class optDatasetConstrs(Dataset):
         model._model.setObjective(0)
         # solve
         model._model.optimize()
-        return model._model
+        return model
 
 
     def _getBindingConstrs(self, model):
