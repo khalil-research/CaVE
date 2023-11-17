@@ -10,6 +10,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 from scipy.optimize import nnls
+#from fnnls import fnnls
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -203,6 +204,7 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # solve the linear equations
         λ, _ = nnls(ctr.T, cp)
+        #λ, _ = fnnls(ctr.T, cp, epsilon=1e-5)
         # get projection
         proj = λ @ ctr
         # normalize
