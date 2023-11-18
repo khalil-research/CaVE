@@ -49,10 +49,26 @@ class abstractConeAlignedCosine(nn.Module, ABC):
             raise ValueError("No reduction '{}'.".format(reduction))
         return loss
 
-    @abstractmethod
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
         Abstract method to calculate loss.
+        """
+        # cost vectors direction
+        if optmodel.modelSense == EPO.MINIMIZE:
+            # minimize
+            pred_cost = - pred_cost
+        # get projection
+        proj = self._getProjection(pred_cost, tight_ctrs)
+        # calculate cosine similarity
+        loss = - F.cosine_similarity(pred_cost.unsqueeze(1),
+                                     proj.unsqueeze(0),
+                                     dim=2)
+        return loss
+
+    @abstractmethod
+    def _getProjection(self, pred_cost, tight_ctrs):
+        """
+        Abstract method to obtain projection.
         """
         pass
 
@@ -228,18 +244,12 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         """
         A method to calculate loss
         """
-        # get device
-        device = pred_cost.device
-        # get batch size
-        batch_size = len(pred_cost)
-        # init loss
-        loss = torch.empty(batch_size).to(device)
         # cost vectors direction
         if optmodel.modelSense == EPO.MINIMIZE:
             # minimize
             pred_cost = - pred_cost
         # get samples
-        vecs = self._getSamples(tight_ctrs.cpu().detach().numpy())
+        vecs = self._getProjection(tight_ctrs.cpu().detach().numpy())
         # calculate cosine similarity
         cos_sim = F.cosine_similarity(pred_cost.unsqueeze(1), vecs, dim=2)
         # get max cosine similarity for each sample
@@ -247,17 +257,19 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         loss = - max_cos_sim
         return loss
 
-    def _getSamples(self, ctrs):
+    def _getProjection(self, tight_ctrs):
         """
         A method to sample vectors from rays of cone
         """
         # get solutions
-        λ_val = np.random.rand(ctrs.shape[0], self.n_samples, ctrs.shape[1])
+        λ_val = np.random.rand(tight_ctrs.shape[0],
+                               self.n_samples,
+                               tight_ctrs.shape[1])
         # normalize
         λ_norm = λ_val / np.linalg.norm(λ_val, axis=2, keepdims=True)
         # get normalized projection
-        vecs = torch.FloatTensor(λ_norm @ ctrs)
-        return vecs
+        vecs = torch.FloatTensor(λ_norm @ tight_ctrs)
+        return vecs.detach()
 
 
 class signConeAlignedCosine(abstractConeAlignedCosine):
@@ -272,30 +284,27 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
         device = pred_cost.device
         # get batch size
         batch_size = len(pred_cost)
-        # init loss
-        loss = torch.empty(batch_size).to(device)
         # cost vectors direction
         if optmodel.modelSense == EPO.MINIMIZE:
             # minimize
             pred_cost = - pred_cost
-        # to numpy
-        cp = pred_cost.detach().cpu().numpy()
-        ctrs = tight_ctrs.detach().cpu().numpy()
+        # init loss
+        loss = torch.empty(batch_size).to(device)
         for i in range(batch_size):
             # get projection
-            p = self._getSignProjection(cp[i], ctrs[i])
+            p = self._getProjection(pred_cost[i], tight_ctrs[i])
             # calculate cosine similarity
             loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
                                             p.unsqueeze(0))
         return loss
 
-    def _getSignProjection(self, cp, ctr):
+    def _getProjection(self, cp, ctr):
         """
         A method to get the projection of the vector onto the hyperquadrant cone
         """
-        sign = ctr[-len(cp):].sum(axis=0)
+        sign = ctr[-len(cp):].sum(dim=0)
         # get projection on the hyperquadrant
-        proj = cp * (np.sign(cp) == np.sign(sign))
+        proj = cp * (torch.sign(cp) == torch.sign(sign))
         # normalize
-        proj = torch.FloatTensor(proj / np.linalg.norm(proj))
-        return proj
+        proj = proj / torch.linalg.norm(proj)
+        return proj.detach()
