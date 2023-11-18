@@ -60,9 +60,7 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         # get projection
         proj = self._getProjection(pred_cost, tight_ctrs)
         # calculate cosine similarity
-        loss = - F.cosine_similarity(pred_cost.unsqueeze(1),
-                                     proj.unsqueeze(0),
-                                     dim=2)
+        loss = - F.cosine_similarity(pred_cost, proj, dim=1)
         return loss
 
     @abstractmethod
@@ -228,6 +226,17 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         return torch.FloatTensor(proj)
 
 
+class avgVectConeAlignedCosine(abstractConeAlignedCosine):
+    """
+    A autograd module to align cone and vector cosine similarity loss via average base vectors
+    """
+    def _getProjection(self, pred_cost, tight_ctrs):
+        """
+        A method to average of base vectors
+        """
+        return tight_ctrs.mean(dim=1)
+
+
 class samplingConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss from sampling
@@ -276,35 +285,15 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to quickly align vector to the subset (hyperquadrant) of cone cosine similarity loss
     """
-    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
-        """
-        A method to calculate loss
-        """
-        # get device
-        device = pred_cost.device
-        # get batch size
-        batch_size = len(pred_cost)
-        # cost vectors direction
-        if optmodel.modelSense == EPO.MINIMIZE:
-            # minimize
-            pred_cost = - pred_cost
-        # init loss
-        loss = torch.empty(batch_size).to(device)
-        for i in range(batch_size):
-            # get projection
-            p = self._getProjection(pred_cost[i], tight_ctrs[i])
-            # calculate cosine similarity
-            loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
-                                            p.unsqueeze(0))
-        return loss
-
-    def _getProjection(self, cp, ctr):
+    def _getProjection(self, pred_cost, tight_ctrs):
         """
         A method to get the projection of the vector onto the hyperquadrant cone
         """
-        sign = ctr[-len(cp):].sum(dim=0)
+        # compute signs
+        sign = tight_ctrs[:, -pred_cost.shape[1]:].sum(dim=1)
         # get projection on the hyperquadrant
-        proj = cp * (torch.sign(cp) == torch.sign(sign))
+        proj = pred_cost * (torch.sign(pred_cost) == torch.sign(sign))
         # normalize
-        proj = proj / torch.linalg.norm(proj)
+        norm = torch.linalg.norm(proj, dim=1, keepdim=True)
+        proj = proj / norm
         return proj.detach()
