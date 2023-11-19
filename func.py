@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
+from pathos.multiprocessing import ProcessingPool
 from scipy.optimize import nnls
 #from fnnls import fnnls
 import torch
@@ -70,41 +71,52 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         """
         pass
 
-    def _checkInCone(self, cp, ctr):
-        """
-        Method to check if the given cost vector in the cone
-        """
-        # ceate a model
-        m = gp.Model("Cone Combination")
-        # turn off output
-        m.Params.outputFlag = 0
-        # numerical precision
-        m.Params.FeasibilityTol = 1e-3
-        m.Params.OptimalityTol = 1e-3
-        # varibles
-        λ = m.addMVar(len(ctr), name="λ")
-        # constraints
-        m.addConstr(λ @ ctr == cp)
-        # objective function
-        m.setObjective(0, GRB.MINIMIZE)
-        # solve the model
-        m.optimize()
-        # return the status of the model
-        return m.status == GRB.OPTIMAL
+def _checkInCone(cp, ctr):
+    """
+    Method to check if the given cost vector in the cone
+    """
+    # ceate a model
+    m = gp.Model("Cone Combination")
+    # turn off output
+    m.Params.outputFlag = 0
+    # numerical precision
+    m.Params.FeasibilityTol = 1e-3
+    m.Params.OptimalityTol = 1e-3
+    # varibles
+    λ = m.addMVar(len(ctr), name="λ")
+    # constraints
+    m.addConstr(λ @ ctr == cp)
+    # objective function
+    m.setObjective(0, GRB.MINIMIZE)
+    # solve the model
+    m.optimize()
+    # return the status of the model
+    return m.status == GRB.OPTIMAL
 
 
 class exactConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector with exact cosine similarity loss
     """
-    def __init__(self, optmodel, warmstart=True, conecheck=False):
+    def __init__(self, optmodel, warmstart=True, conecheck=False, processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
+            warmstart (bool): start QP with initial solutions or not
+            conecheck (bool): check if cost vector is in the cone or not
+            processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
         super().__init__(optmodel)
         self.warmstart = warmstart
         self.conecheck = conecheck
+        self.processes = mp.cpu_count() if not processes else processes
+        # single-core
+        if self.processes == 1:
+            self.pool = None
+        # multi-core
+        else:
+            self.pool = ProcessingPool(self.processes)
+        print("Num of cores: {}".format(self.processes))
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -115,21 +127,31 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # to numpy
         pred_cost = pred_cost.detach().cpu().numpy()
         tight_ctrs = tight_ctrs.detach().cpu().numpy()
-        # init loss
-        proj = torch.empty(pred_cost.shape).to(device)
-        # calculate projection
-        for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-            proj[i] = self._solveQP(cp, ctr)
+        # single-core
+        if self.processes == 1:
+            # init loss
+            proj = torch.empty(pred_cost.shape).to(device)
+            # calculate projection
+            for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+                proj[i] = self._solveQP(cp, ctr, self.warmstart, self.conecheck)
+        # multi-core
+        else:
+            res = self.pool.amap(self._solveQP,
+                                 pred_cost, tight_ctrs,
+                                 [self.warmstart]*len(pred_cost),
+                                 [self.conecheck]*len(pred_cost)).get()
+            proj = torch.stack(res, dim=0)
         return proj
 
-    def _solveQP(self, cp, ctr):
+    @staticmethod
+    def _solveQP(cp, ctr, warmstart, conecheck):
         """
         A static method to solve quadratic programming.
         """
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # check if in the cone
-        if self.conecheck and self._checkInCone(cp, ctr):
+        if conecheck and _checkInCone(cp, ctr):
             return torch.FloatTensor(cp.copy())
         # ceate a model
         m = gp.Model("projection")
@@ -143,7 +165,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # varibles
         λ = m.addMVar(len(ctr), name="λ")
         # warm-start
-        if self.warmstart:
+        if warmstart:
             init_λ = np.zeros(len(ctr))
             sign = ctr[-len(cp):].sum(axis=0)
             init_λ[-len(cp):] = np.abs(cp) * (np.sign(cp) == np.sign(sign)) # hyperqudrants
@@ -164,13 +186,23 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector with non-negative least squares
     """
-    def __init__(self, optmodel, conecheck=False):
+    def __init__(self, optmodel, conecheck=False, processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
+            conecheck (bool): check if cost vector is in the cone or not
+            processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
         super().__init__(optmodel)
         self.conecheck = conecheck
+        self.processes = mp.cpu_count() if not processes else processes
+        # single-core
+        if self.processes == 1:
+            self.pool = None
+        # multi-core
+        else:
+            self.pool = ProcessingPool(self.processes)
+        print("Num of cores: {}".format(self.processes))
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -181,18 +213,27 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         # to numpy
         pred_cost = pred_cost.detach().cpu().numpy()
         tight_ctrs = tight_ctrs.detach().cpu().numpy()
-        # init loss
-        proj = torch.empty(pred_cost.shape).to(device)
-        # calculate projection
-        for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-            proj[i] = self._solveNNLS(cp, ctr)
+        # single-core
+        if self.processes == 1:
+            # init loss
+            proj = torch.empty(pred_cost.shape).to(device)
+            # calculate projection
+            for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+                proj[i] = self._solveNNLS(cp, ctr, self.conecheck)
+        # multi-core
+        else:
+            res = self.pool.amap(self._solveNNLS,
+                                 pred_cost, tight_ctrs,
+                                 [self.conecheck]*len(pred_cost)).get()
+            proj = torch.stack(res, dim=0)
         return proj
 
-    def _solveNNLS(self, cp, ctr):
+    @staticmethod
+    def _solveNNLS(cp, ctr, conecheck):
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # check if in the cone
-        if self.conecheck and self._checkInCone(cp, ctr):
+        if conecheck and _checkInCone(cp, ctr):
             return torch.FloatTensor(cp.copy())
         # solve the linear equations
         λ, _ = nnls(ctr.T, cp)
