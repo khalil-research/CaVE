@@ -127,7 +127,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         A static method to solve quadratic programming.
         """
         # drop pads
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # check if in the cone
         if self.conecheck and self._checkInCone(cp, ctr):
             return torch.FloatTensor(cp.copy())
@@ -190,7 +190,7 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
 
     def _solveNNLS(self, cp, ctr):
         # drop pads
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # check if in the cone
         if self.conecheck and self._checkInCone(cp, ctr):
             return torch.FloatTensor(cp.copy())
