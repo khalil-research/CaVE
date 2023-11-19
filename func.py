@@ -74,8 +74,6 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         """
         Method to check if the given cost vector in the cone
         """
-        # drop pads
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # ceate a model
         m = gp.Model("Cone Combination")
         # turn off output
@@ -108,41 +106,31 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         self.warmstart = warmstart
         self.conecheck = conecheck
 
-    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
-        """
-        A method to calculate loss
-        """
-        # get device
-        device = pred_cost.device
-        # get batch size
-        batch_size = len(pred_cost)
-        # init loss
-        loss = torch.empty(batch_size).to(device)
-        # cost vectors direction
-        if optmodel.modelSense == EPO.MINIMIZE:
-            # minimize
-            pred_cost = - pred_cost
-        # to numpy
-        cp = pred_cost.detach().cpu().numpy()
-        ctrs = tight_ctrs.detach().cpu().numpy()
-        for i in range(batch_size):
-            if self.conecheck and self._checkInCone(cp[i], ctrs[i]):
-                # in the cone
-                p = torch.FloatTensor(cp[i].copy())
-            else:
-                # get projection
-                p = self._getProjection(cp[i], ctrs[i])
-            # calculate cosine similarity
-            loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
-                                            p.unsqueeze(0))
-        return loss
-
-    def _getProjection(self, cp, ctr):
+    def _getProjection(self, pred_cost, tight_ctrs):
         """
         A method to get the projection of the vector onto the polar cone via solving a quadratic programming
         """
+        # get device
+        device = pred_cost.device
+        # to numpy
+        pred_cost = pred_cost.detach().cpu().numpy()
+        tight_ctrs = tight_ctrs.detach().cpu().numpy()
+        # init loss
+        proj = torch.empty(pred_cost.shape).to(device)
+        # calculate projection
+        for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+            proj[i] = self._solveQP(cp, ctr)
+        return proj
+
+    def _solveQP(self, cp, ctr):
+        """
+        A static method to solve quadratic programming.
+        """
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
+        # check if in the cone
+        if self.conecheck and self._checkInCone(cp, ctr):
+            return torch.FloatTensor(cp.copy())
         # ceate a model
         m = gp.Model("projection")
         # turn off output
@@ -150,6 +138,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # numerical precision
         m.Params.FeasibilityTol = 1e-3
         m.Params.OptimalityTol = 1e-3
+        # focus on numeric problem
+        m.Params.NumericFocus = 3
         # varibles
         λ = m.addMVar(len(ctr), name="λ")
         # warm-start
@@ -161,15 +151,13 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # objective function
         obj = (cp - λ @ ctr) @ (cp - λ @ ctr)
         m.setObjective(obj, GRB.MINIMIZE)
-        # focus on numeric problem
-        m.Params.NumericFocus = 3
         # solve
         m.optimize()
         # get solutions
-        proj = np.array(λ.X) @ ctr
+        p = np.array(λ.X) @ ctr
         # normalize
-        proj = torch.FloatTensor(proj / np.linalg.norm(proj))
-        return proj
+        p = torch.FloatTensor(p / np.linalg.norm(p))
+        return p
 
 
 class nnlsConeAlignedCosine(abstractConeAlignedCosine):
@@ -184,36 +172,26 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         super().__init__(optmodel)
         self.conecheck = conecheck
 
-    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+    def _getProjection(self, pred_cost, tight_ctrs):
         """
-        A method to calculate loss
+        A method to get the projection of the vector onto the polar cone via solving a quadratic programming
         """
         # get device
         device = pred_cost.device
-        # get batch size
-        batch_size = len(pred_cost)
-        # init loss
-        loss = torch.empty(batch_size).to(device)
-        # cost vectors direction
-        if optmodel.modelSense == EPO.MINIMIZE:
-            # minimize
-            pred_cost = - pred_cost
         # to numpy
-        cp = pred_cost.detach().cpu().numpy()
-        ctrs = tight_ctrs.detach().cpu().numpy()
-        for i in range(batch_size):
-            if self.conecheck and self._checkInCone(cp[i], ctrs[i]):
-                # in the cone
-                p = torch.FloatTensor(cp[i].copy())
-            else:
-                # get projection
-                p = self._getProjection(cp[i], ctrs[i])
-            # calculate cosine similarity
-            loss[i] = - F.cosine_similarity(pred_cost[i].unsqueeze(0),
-                                            p.unsqueeze(0))
-        return loss
+        pred_cost = pred_cost.detach().cpu().numpy()
+        tight_ctrs = tight_ctrs.detach().cpu().numpy()
+        # init loss
+        proj = torch.empty(pred_cost.shape).to(device)
+        # calculate projection
+        for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+            proj[i] = self._solveNNLS(cp, ctr)
+        return proj
 
-    def _getProjection(self, cp, ctr):
+    def _solveNNLS(self, cp, ctr):
+        # check if in the cone
+        if self.conecheck and self._checkInCone(cp, ctr):
+            return torch.FloatTensor(cp.copy())
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # solve the linear equations
