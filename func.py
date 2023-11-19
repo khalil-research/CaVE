@@ -189,11 +189,11 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         return proj
 
     def _solveNNLS(self, cp, ctr):
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # check if in the cone
         if self.conecheck and self._checkInCone(cp, ctr):
             return torch.FloatTensor(cp.copy())
-        # drop pads
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-5]
         # solve the linear equations
         λ, _ = nnls(ctr.T, cp)
         #λ, _ = fnnls(ctr.T, cp, epsilon=1e-5)
