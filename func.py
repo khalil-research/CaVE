@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-A autograd module for cone-aligned loss
+An autograd module for cone-aligned loss
 """
 
 from abc import ABC, abstractmethod
