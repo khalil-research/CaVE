@@ -245,7 +245,7 @@ class nnlsConeAlignedCosine(abstractConeAlignedCosine):
         return torch.FloatTensor(proj)
 
 
-class avgVectConeAlignedCosine(abstractConeAlignedCosine):
+class avgConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss via average base vectors
     """
