@@ -6,6 +6,7 @@ An autograd module for cone-aligned loss
 
 from abc import ABC, abstractmethod
 
+import cvxpy as cvx
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
@@ -71,44 +72,26 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         """
         pass
 
-def _checkInCone(cp, ctr):
-    """
-    Method to check if the given cost vector in the cone
-    """
-    # ceate a model
-    m = gp.Model("Cone Combination")
-    # turn off output
-    m.Params.outputFlag = 0
-    # numerical precision
-    m.Params.FeasibilityTol = 1e-3
-    m.Params.OptimalityTol = 1e-3
-    # varibles
-    λ = m.addMVar(len(ctr), name="λ")
-    # constraints
-    m.addConstr(λ @ ctr == cp)
-    # objective function
-    m.setObjective(0, GRB.MINIMIZE)
-    # solve the model
-    m.optimize()
-    # return the status of the model
-    return m.status == GRB.OPTIMAL
-
 
 class exactConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector with exact cosine similarity loss
     """
-    def __init__(self, optmodel, warmstart=True, conecheck=False, processes=1):
+    def __init__(self, optmodel, solver=None, processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
-            warmstart (bool): start QP with initial solutions or not
-            conecheck (bool): check if cost vector is in the cone or not
             processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
         super().__init__(optmodel)
-        self.warmstart = warmstart
-        self.conecheck = conecheck
+        # solver
+        if solver == "gurobi":
+            self._solveQP = self._solveGurobi
+        if solver == "clarabel":
+            self._solveQP = self._solveClarabel
+        if solver == "nnls":
+            self._solveQP = self._solveNNLS
+        # number of precess
         self.processes = mp.cpu_count() if not processes else processes
         # single-core
         if self.processes == 1:
@@ -117,6 +100,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         else:
             self.pool = ProcessingPool(self.processes)
         print("Num of cores: {}".format(self.processes))
+
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -133,26 +117,27 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
             proj = torch.empty(pred_cost.shape).to(device)
             # calculate projection
             for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                proj[i] = self._solveQP(cp, ctr, self.warmstart, self.conecheck)
+                proj[i] = self._solveQP(cp, ctr)
         # multi-core
         else:
-            res = self.pool.amap(self._solveQP,
-                                 pred_cost, tight_ctrs,
-                                 [self.warmstart]*len(pred_cost),
-                                 [self.conecheck]*len(pred_cost)).get()
+            res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
             proj = torch.stack(res, dim=0)
         return proj
 
     @staticmethod
-    def _solveQP(cp, ctr, warmstart, conecheck):
+    def _solveQP(cp, ctr):
         """
-        A static method to solve quadratic programming.
+        A unimplemented method requires to solve QP
+        """
+        raise ValueError("No solver and its corresponding '_solveQP' method.")
+
+    @staticmethod
+    def _solveGurobi(cp, ctr):
+        """
+        A static method to solve quadratic programming with gurobi
         """
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
-        # check if in the cone
-        if conecheck and _checkInCone(cp, ctr):
-            return torch.FloatTensor(cp.copy())
         # ceate a model
         m = gp.Model("projection")
         # turn off output
@@ -164,12 +149,6 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         m.Params.NumericFocus = 3
         # varibles
         λ = m.addMVar(len(ctr), name="λ")
-        # warm-start
-        if warmstart:
-            init_λ = np.zeros(len(ctr))
-            sign = ctr[-len(cp):].sum(axis=0)
-            init_λ[-len(cp):] = np.abs(cp) * (np.sign(cp) == np.sign(sign)) # hyperqudrants
-            λ.Start = init_λ
         # objective function
         obj = (cp - λ @ ctr) @ (cp - λ @ ctr)
         m.setObjective(obj, GRB.MINIMIZE)
@@ -181,68 +160,40 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         p = torch.FloatTensor(p / np.linalg.norm(p))
         return p
 
-
-class nnlsConeAlignedCosine(abstractConeAlignedCosine):
-    """
-    A autograd module to align cone and vector with non-negative least squares
-    """
-    def __init__(self, optmodel, conecheck=False, processes=1):
+    @staticmethod
+    def _solveClarabel(cp, ctr):
         """
-        Args:
-            optmodel (optModel): an PyEPO optimization model
-            conecheck (bool): check if cost vector is in the cone or not
-            processes (int): number of processors, 1 for single-core, 0 for all of cores
+        A static method to solve quadratic programming with Clarabel
         """
-        super().__init__(optmodel)
-        self.conecheck = conecheck
-        self.processes = mp.cpu_count() if not processes else processes
-        # single-core
-        if self.processes == 1:
-            self.pool = None
-        # multi-core
-        else:
-            self.pool = ProcessingPool(self.processes)
-        print("Num of cores: {}".format(self.processes))
-
-    def _getProjection(self, pred_cost, tight_ctrs):
-        """
-        A method to get the projection of the vector onto the polar cone via solving a quadratic programming
-        """
-        # get device
-        device = pred_cost.device
-        # to numpy
-        pred_cost = pred_cost.detach().cpu().numpy()
-        tight_ctrs = tight_ctrs.detach().cpu().numpy()
-        # single-core
-        if self.processes == 1:
-            # init loss
-            proj = torch.empty(pred_cost.shape).to(device)
-            # calculate projection
-            for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                proj[i] = self._solveNNLS(cp, ctr, self.conecheck)
-        # multi-core
-        else:
-            res = self.pool.amap(self._solveNNLS,
-                                 pred_cost, tight_ctrs,
-                                 [self.conecheck]*len(pred_cost)).get()
-            proj = torch.stack(res, dim=0)
-        return proj
+        # varibles
+        λ = cvx.Variable(len(ctr), name="λ", nonneg=True)
+        # onjective function
+        objective = cvx.Minimize(cvx.sum_squares(cp - λ @ ctr))
+        # ceate a model
+        problem = cvx.Problem(objective)
+        # solve and focus on numeric problem
+        problem.solve(solver=cvx.CLARABEL)
+        # get solutions
+        proj = λ.value @ ctr
+        # normalize
+        proj = proj / np.linalg.norm(proj)
+        return torch.FloatTensor(proj)
 
     @staticmethod
-    def _solveNNLS(cp, ctr, conecheck):
+    def _solveNNLS(cp, ctr):
+        """
+        A static method to solve quadratic programming with scipy
+        """
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
-        # check if in the cone
-        if conecheck and _checkInCone(cp, ctr):
-            return torch.FloatTensor(cp.copy())
         # solve the linear equations
         λ, _ = nnls(ctr.T, cp)
         #λ, _ = fnnls(ctr.T, cp, epsilon=1e-5)
         # get projection
-        proj = λ @ ctr
+        p = λ @ ctr
         # normalize
-        proj = proj / np.linalg.norm(proj)
-        return torch.FloatTensor(proj)
+        p = torch.FloatTensor(p / np.linalg.norm(p))
+        return p
 
 
 class avgConeAlignedCosine(abstractConeAlignedCosine):
