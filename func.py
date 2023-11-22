@@ -122,6 +122,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         else:
             res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
             proj = torch.stack(res, dim=0)
+        # normalize
+        proj = proj / proj.norm(dim=1, keepdim=True)
         return proj
 
     @staticmethod
@@ -156,9 +158,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         m.optimize()
         # get solutions
         p = np.array(λ.X) @ ctr
-        # normalize
-        p = torch.FloatTensor(p / np.linalg.norm(p))
-        return p
+        return torch.FloatTensor(p)
 
     @staticmethod
     def _solveClarabel(cp, ctr):
@@ -174,10 +174,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # solve and focus on numeric problem
         problem.solve(solver=cvx.CLARABEL)
         # get solutions
-        proj = λ.value @ ctr
-        # normalize
-        proj = proj / np.linalg.norm(proj)
-        return torch.FloatTensor(proj)
+        p = λ.value @ ctr
+        return torch.FloatTensor(p)
 
     @staticmethod
     def _solveNNLS(cp, ctr):
@@ -191,9 +189,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         #λ, _ = fnnls(ctr.T, cp, epsilon=1e-5)
         # get projection
         p = λ @ ctr
-        # normalize
-        p = torch.FloatTensor(p / np.linalg.norm(p))
-        return p
+        return torch.FloatTensor(p)
 
 
 class avgConeAlignedCosine(abstractConeAlignedCosine):
