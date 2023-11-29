@@ -53,7 +53,7 @@ class abstractConeAlignedCosine(nn.Module, ABC):
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
-        Abstract method to calculate loss.
+        A method to calculate loss.
         """
         # cost vectors direction
         if optmodel.modelSense == EPO.MINIMIZE:
