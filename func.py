@@ -165,6 +165,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with Clarabel
         """
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # varibles
         λ = cvx.Variable(len(ctr), name="λ", nonneg=True)
         # onjective function
@@ -172,7 +174,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # ceate a model
         problem = cvx.Problem(objective)
         # solve and focus on numeric problem
-        problem.solve(solver=cvx.CLARABEL)
+        problem.solve(solver=cvx.CLARABEL,
+                      tol_infeas_rel=1e-3, tol_feas=1e-3, max_iter=20)
         # get solutions
         p = λ.value @ ctr
         return torch.FloatTensor(p)
