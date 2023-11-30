@@ -124,6 +124,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
             proj = torch.stack(res, dim=0)
         # normalize
         proj = proj / proj.norm(dim=1, keepdim=True)
+        # device
+        proj = proj.to(device)
         return proj
 
     @staticmethod
@@ -157,7 +159,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # solve
         m.optimize()
         # get solutions
-        p = np.array(λ.X) @ ctr
+        p = λ.X @ ctr
         return torch.FloatTensor(p)
 
     @staticmethod
@@ -204,9 +206,8 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
         A method to average of base vectors
         """
         # normalize
-        norms = torch.norm(tight_ctrs, dim=2, keepdim=True)
-        tight_ctrs = tight_ctrs / norms
-        return tight_ctrs.mean(dim=1)
+        tight_ctrs = tight_ctrs / tight_ctrs.norm(dim=2, keepdim=True)
+        return tight_ctrs.mean(dim=1).detach()
 
 
 class samplingConeAlignedCosine(abstractConeAlignedCosine):
@@ -230,7 +231,7 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
             # minimize
             pred_cost = - pred_cost
         # get samples
-        vecs = self._getProjection(tight_ctrs.cpu().detach().numpy())
+        vecs = self._getProjection(tight_ctrs)
         # calculate cosine similarity
         cos_sim = F.cosine_similarity(pred_cost.unsqueeze(1), vecs, dim=2)
         # get max cosine similarity for each sample
@@ -242,19 +243,17 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         """
         A method to sample vectors from rays of cone
         """
+        # get device
+        device = tight_ctrs.device
         # normalize constraints
-        norms = np.linalg.norm(tight_ctrs, axis=2, keepdims=True)
-        tight_ctrs = tight_ctrs / norms
+        tight_ctrs = tight_ctrs / tight_ctrs.norm(dim=2, keepdim=True)
         # random weights
-        λ_val = np.random.rand(tight_ctrs.shape[0],
-                               self.n_samples,
-                               tight_ctrs.shape[1])
-        # normalize weights
-        norm = np.sum(λ_val, axis=2, keepdims=True)
-        λ_val = λ_val / norm
+        λ_val = torch.rand(tight_ctrs.shape[0], self.n_samples, tight_ctrs.shape[1])
+        λ_val = λ_val.to(device)
+        λ_val = λ_val / λ_val.sum(dim=2, keepdims=True)
         # get projection
-        vecs = torch.FloatTensor(λ_val @ tight_ctrs)
-        return vecs
+        vecs = λ_val @ tight_ctrs
+        return vecs.detach()
 
 
 class signConeAlignedCosine(abstractConeAlignedCosine):
@@ -270,6 +269,5 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
         # get projection on the hyperquadrant
         proj = pred_cost * (torch.sign(pred_cost) == torch.sign(sign))
         # normalize
-        norm = torch.linalg.norm(proj, dim=1, keepdim=True)
-        proj = proj / norm
+        proj = proj / proj.norm(dim=1, keepdim=True)
         return proj.detach()
