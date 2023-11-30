@@ -203,6 +203,7 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
         """
         A method to average of base vectors
         """
+        # normalize
         norms = torch.norm(tight_ctrs, dim=2, keepdim=True)
         tight_ctrs = tight_ctrs / norms
         return tight_ctrs.mean(dim=1)
@@ -241,15 +242,19 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         """
         A method to sample vectors from rays of cone
         """
-        # get solutions
+        # normalize constraints
+        norms = np.linalg.norm(tight_ctrs, axis=2, keepdims=True)
+        tight_ctrs = tight_ctrs / norms
+        # random weights
         λ_val = np.random.rand(tight_ctrs.shape[0],
                                self.n_samples,
                                tight_ctrs.shape[1])
-        # normalize
-        λ_norm = λ_val / np.linalg.norm(λ_val, axis=2, keepdims=True)
-        # get normalized projection
-        vecs = torch.FloatTensor(λ_norm @ tight_ctrs)
-        return vecs.detach()
+        # normalize weights
+        norm = np.sum(λ_val, axis=2, keepdims=True)
+        λ_val = λ_val / norm
+        # get projection
+        vecs = torch.FloatTensor(λ_val @ tight_ctrs)
+        return vecs
 
 
 class signConeAlignedCosine(abstractConeAlignedCosine):
