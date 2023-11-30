@@ -203,6 +203,8 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
         """
         A method to average of base vectors
         """
+        norms = torch.norm(tight_ctrs, dim=2, keepdim=True)
+        tight_ctrs = tight_ctrs / norms
         return tight_ctrs.mean(dim=1)
 
 
