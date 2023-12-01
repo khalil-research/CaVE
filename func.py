@@ -24,17 +24,28 @@ class abstractConeAlignedCosine(nn.Module, ABC):
     """
     Abstract base class for cone-aligned cosine loss modules.
     """
-    def __init__(self, optmodel, reduction="mean"):
+    def __init__(self, optmodel, reduction="mean", processes=1):
         """
         Initialize the abstract class with an optimization model.
         Args:
             optmodel (optModel): an PyEPO optimization model
+            reduction (str): the reduction to apply to the output
+            processes (int): number of processors, 1 for single-core, 0 for all of coress
         """
         super().__init__()
         if not isinstance(optmodel, optModel):
             raise TypeError("arg model is not an optModel")
         self.optmodel = optmodel
         self.reduction = reduction
+        # number of processes
+        self.processes = mp.cpu_count() if not processes else processes
+        # single-core
+        if self.processes == 1:
+            self.pool = None
+        # multi-core
+        else:
+            self.pool = ProcessingPool(self.processes)
+        print("Num of cores: {}".format(self.processes))
 
     def forward(self, pred_cost, tight_ctrs):
         """
@@ -78,13 +89,15 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector with exact cosine similarity loss
     """
-    def __init__(self, optmodel, solver=None, processes=1):
+    def __init__(self, optmodel, solver=None, reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
-            processes (int): number of processors, 1 for single-core, 0 for all of cores
+            reduction (str): the reduction to apply to the output
+            solver (str): the QP solver to find projection
+            processes (int): number of processors, 1 for single-core, 0 for all of coress
         """
-        super().__init__(optmodel)
+        super().__init__(optmodel, reduction, processes)
         # solver
         if solver == "gurobi":
             self._solveQP = self._solveGurobi
@@ -92,16 +105,6 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
             self._solveQP = self._solveClarabel
         if solver == "nnls":
             self._solveQP = self._solveNNLS
-        # number of precess
-        self.processes = mp.cpu_count() if not processes else processes
-        # single-core
-        if self.processes == 1:
-            self.pool = None
-        # multi-core
-        else:
-            self.pool = ProcessingPool(self.processes)
-        print("Num of cores: {}".format(self.processes))
-
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -202,26 +205,49 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss via average base vectors
     """
+    def __init__(self, optmodel, check_cone=False, reduction="mean", processes=1):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+            reduction (str): the reduction to apply to the output
+            check_cone (bool): if check the cost vector in the cone or not
+            processes (int): number of processors, 1 for single-core, 0 for all of cores
+        """
+        super().__init__(optmodel, reduction, processes)
+        self.check_cone = check_cone
+
     def _getProjection(self, pred_cost, tight_ctrs):
         """
         A method to get average of binding constraints
         """
         # normalize
         tight_ctrs = tight_ctrs / tight_ctrs.norm(dim=2, keepdim=True)
-        return tight_ctrs.mean(dim=1).detach()
+        # get average
+        vecs = tight_ctrs.mean(dim=1).detach()
+        # cone check
+        if self.check_cone:
+            # update projection
+            _updateProjectionIfInCone(vecs, pred_cost, tight_ctrs,
+                                      self.processes, self.pool)
+        return vecs
 
 
 class samplingConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss from sampling
     """
-    def __init__(self, optmodel, n_samples=10):
+    def __init__(self, optmodel, n_samples=10, reduction="mean", check_cone=False, processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
+            n_samples (int): number of samples
+            reduction (str): the reduction to apply to the output
+            check_cone (bool): if check the cost vector in the cone or not
+            processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
-        super().__init__(optmodel)
+        super().__init__(optmodel, reduction, processes)
         self.n_samples = n_samples
+        self.check_cone = check_cone
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
@@ -232,7 +258,7 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
             # minimize
             pred_cost = - pred_cost
         # get samples
-        vecs = self._getProjection(tight_ctrs)
+        vecs = self._getProjection(pred_cost, tight_ctrs)
         # calculate cosine similarity
         cos_sim = F.cosine_similarity(pred_cost.unsqueeze(1), vecs, dim=2)
         # get max cosine similarity for each sample
@@ -240,7 +266,7 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         loss = - max_cos_sim
         return loss
 
-    def _getProjection(self, tight_ctrs):
+    def _getProjection(self, pred_cost, tight_ctrs):
         """
         A method to sample vectors from rays of cone
         """
@@ -254,6 +280,11 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         λ_val = λ_val / λ_val.sum(dim=2, keepdims=True)
         # get projection
         vecs = λ_val @ tight_ctrs
+        # cone check
+        if self.check_cone:
+            # update projection
+            _updateProjectionIfInCone(vecs, pred_cost, tight_ctrs,
+                                      self.processes, self.pool)
         return vecs.detach()
 
 
@@ -261,6 +292,17 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to quickly align vector to the subset (hyperquadrant) of cone cosine similarity loss
     """
+    def __init__(self, optmodel, check_cone=False, reduction="mean", processes=1):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+            reduction (str): the reduction to apply to the output
+            check_cone (bool): if check the cost vector in the cone or not
+            processes (int): number of processors, 1 for single-core, 0 for all of cores
+        """
+        super().__init__(optmodel, reduction, processes)
+        self.check_cone = check_cone
+
     def _getProjection(self, pred_cost, tight_ctrs):
         """
         A method to get the projection of the vector onto the hyperquadrant cone
@@ -271,4 +313,54 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
         proj = pred_cost * (torch.sign(pred_cost) == torch.sign(sign))
         # normalize
         proj = proj / proj.norm(dim=1, keepdim=True)
+        # cone check
+        if self.check_cone:
+            # update projection
+            _updateProjectionIfInCone(proj, pred_cost, tight_ctrs,
+                                      self.processes, self.pool)
         return proj.detach()
+
+
+def _updateProjectionIfInCone(proj, pred_cost, tight_ctrs, processes, pool):
+    """
+    A method to update projection of cost vectr in cone as itself
+    """
+    # single-core
+    if processes == 1:
+        for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+            # if in the cone
+            if _checkInCone(cp, ctr):
+                # projection is itself
+                proj[i] = cp
+    # multi-core
+    else:
+        # check if in the cone
+        res = pool.amap(_checkInCone, pred_cost, tight_ctrs).get()
+        # projection is itself
+        proj[res] = pred_cost[res]
+
+
+def _checkInCone(cp, ctr):
+    """
+    Method to check if the given cost vector in the cone
+    """
+    # to numoy
+    cp = cp.detach().cpu().numpy()
+    ctr = ctr.detach().cpu().numpy()
+    # ceate a model
+    m = gp.Model("Cone Combination")
+    # turn off output
+    m.Params.outputFlag = 0
+    # numerical precision
+    m.Params.FeasibilityTol = 1e-3
+    m.Params.OptimalityTol = 1e-3
+    # varibles
+    λ = m.addMVar(len(ctr), name="λ")
+    # constraints
+    m.addConstr(λ @ ctr == cp)
+    # objective function
+    m.setObjective(0, GRB.MINIMIZE)
+    # solve the model
+    m.optimize()
+    # return the status of the model
+    return m.status == GRB.OPTIMAL
