@@ -24,7 +24,7 @@ class abstractConeAlignedCosine(nn.Module, ABC):
     """
     Abstract base class for cone-aligned cosine loss modules.
     """
-    def __init__(self, optmodel):
+    def __init__(self, optmodel, reduction="mean"):
         """
         Initialize the abstract class with an optimization model.
         Args:
@@ -34,18 +34,19 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         if not isinstance(optmodel, optModel):
             raise TypeError("arg model is not an optModel")
         self.optmodel = optmodel
+        self.reduction = reduction
 
-    def forward(self, pred_cost, tight_ctrs, reduction="mean"):
+    def forward(self, pred_cost, tight_ctrs):
         """
         Forward pass method.
         """
         loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
         # reduction
-        if reduction == "mean":
+        if self.reduction == "mean":
             loss = torch.mean(loss)
-        elif reduction == "sum":
+        elif self.reduction == "sum":
             loss = torch.sum(loss)
-        elif reduction == "none":
+        elif self.reduction == "none":
             loss = loss
         else:
             raise ValueError("No reduction '{}'.".format(reduction))
@@ -203,7 +204,7 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
     """
     def _getProjection(self, pred_cost, tight_ctrs):
         """
-        A method to average of base vectors
+        A method to get average of binding constraints
         """
         # normalize
         tight_ctrs = tight_ctrs / tight_ctrs.norm(dim=2, keepdim=True)
