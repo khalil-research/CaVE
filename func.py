@@ -356,7 +356,7 @@ def _checkInCone(cp, ctr):
     # numerical precision
     m.Params.FeasibilityTol = 1e-3
     m.Params.OptimalityTol = 1e-3
-    # varibles
+    # variables
     λ = m.addMVar(len(ctr), name="λ")
     # constraints
     m.addConstr(λ @ ctr == cp)
