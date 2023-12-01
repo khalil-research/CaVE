@@ -221,7 +221,7 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
         A method to get average of binding constraints
         """
         # normalize
-        tight_ctrs = tight_ctrs / tight_ctrs.norm(dim=2, keepdim=True)
+        tight_ctrs = tight_ctrs / (tight_ctrs.norm(dim=2, keepdim=True) + 1e-8)
         # get average
         vecs = tight_ctrs.mean(dim=1).detach()
         # cone check
@@ -273,7 +273,7 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         # get device
         device = tight_ctrs.device
         # normalize constraints
-        tight_ctrs = tight_ctrs / tight_ctrs.norm(dim=2, keepdim=True)
+        tight_ctrs = tight_ctrs / (tight_ctrs.norm(dim=2, keepdim=True) + 1e-8)
         # random weights
         λ_val = torch.rand(tight_ctrs.shape[0], self.n_samples, tight_ctrs.shape[1])
         λ_val = λ_val.to(device)
@@ -347,6 +347,8 @@ def _checkInCone(cp, ctr):
     # to numoy
     cp = cp.detach().cpu().numpy()
     ctr = ctr.detach().cpu().numpy()
+    # drop pads
+    ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
     # ceate a model
     m = gp.Model("Cone Combination")
     # turn off output
