@@ -121,11 +121,12 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
             proj = torch.empty(pred_cost.shape).to(device)
             # calculate projection
             for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                proj[i] = self._solveQP(cp, ctr)
+                proj[i], _ = self._solveQP(cp, ctr)
         # multi-core
         else:
             res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
-            proj = torch.stack(res, dim=0)
+            proj, _ = zip(*res)
+            proj = torch.stack(proj, dim=0)
         # normalize
         proj = proj / proj.norm(dim=1, keepdim=True)
         # device
@@ -164,7 +165,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         m.optimize()
         # get solutions
         p = λ.X @ ctr
-        return torch.FloatTensor(p)
+        # get value
+        rnorm = m.ObjVal
+        return torch.FloatTensor(p), rnorm
 
     @staticmethod
     def _solveClarabel(cp, ctr):
@@ -184,7 +187,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
                       tol_infeas_rel=1e-3, tol_feas=1e-3, max_iter=20)
         # get solutions
         p = λ.value @ ctr
-        return torch.FloatTensor(p)
+        # get value
+        rnorm = problem.value
+        return torch.FloatTensor(p), rnorm
 
     @staticmethod
     def _solveNNLS(cp, ctr):
@@ -194,11 +199,11 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # solve the linear equations
-        λ, _ = nnls(ctr.T, cp)
+        λ, rnorm = nnls(ctr.T, cp)
         #λ, _ = fnnls(ctr.T, cp, epsilon=1e-5)
         # get projection
         p = λ @ ctr
-        return torch.FloatTensor(p)
+        return torch.FloatTensor(p), rnorm
 
 
 class avgConeAlignedCosine(abstractConeAlignedCosine):
