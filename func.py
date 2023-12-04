@@ -112,9 +112,6 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         # get device
         device = pred_cost.device
-        # to numpy
-        pred_cost = pred_cost.detach().cpu().numpy()
-        tight_ctrs = tight_ctrs.detach().cpu().numpy()
         # single-core
         if self.processes == 1:
             # init loss
@@ -126,11 +123,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         else:
             res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
             proj, _ = zip(*res)
-            proj = torch.stack(proj, dim=0)
+            proj = torch.stack(proj, dim=0).to(device)
         # normalize
         proj = proj / proj.norm(dim=1, keepdim=True)
-        # device
-        proj = proj.to(device)
         return proj
 
     @staticmethod
@@ -145,6 +140,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with gurobi
         """
+        # to numpy
+        cp = cp.detach().cpu().numpy()
+        ctr = ctr.detach().cpu().numpy()
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # ceate a model
@@ -174,6 +172,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with Clarabel
         """
+        # to numpy
+        cp = cp.detach().cpu().numpy()
+        ctr = ctr.detach().cpu().numpy()
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # varibles
@@ -196,6 +197,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with scipy
         """
+        # to numpy
+        cp = cp.detach().cpu().numpy()
+        ctr = ctr.detach().cpu().numpy()
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # solve the linear equations
@@ -204,6 +208,59 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # get projection
         p = λ @ ctr
         return torch.FloatTensor(p), rnorm
+
+
+class innerConeAlignedCosine(exactConeAlignedCosine):
+    def __init__(self, optmodel, solver=None, inner_ratio=0.2,
+                 reduction="mean", processes=1):
+        """
+        Args:
+            optmodel (optModel): an PyEPO optimization model
+            reduction (str): the reduction to apply to the output
+            solver (str): the QP solver to find projection
+            inner_ratio (float): the ratio to push projection inside
+            processes (int): number of processors, 1 for single-core, 0 for all of coress
+        """
+        super().__init__(optmodel, solver, reduction, processes)
+        self.inner_ratio = inner_ratio
+
+    def _getProjection(self, pred_cost, tight_ctrs):
+        """
+        A method to get the projection of the vector onto the polar cone via solving a quadratic programming
+        """
+        # get device
+        device = pred_cost.device
+        # single-core
+        if self.processes == 1:
+            # init loss
+            proj = torch.empty(pred_cost.shape).to(device)
+            rnorm = torch.empty(pred_cost.shape[0]).to(device)
+            # calculate projection
+            for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+                proj[i], rnorm[i] = self._solveQP(cp, ctr)
+        # multi-core
+        else:
+            res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
+            proj, rnorm = zip(*res)
+            proj = torch.stack(proj, dim=0).to(device)
+            rnorm = torch.tensor(rnorm).to(device)
+        # normalize
+        proj = proj / proj.norm(dim=1, keepdim=True)
+        # get average
+        avg = self._getAvg(tight_ctrs)
+        # combine vector
+        vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
+        # projection is itself if in the cone
+        vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
+        return vec
+
+    def _getAvg(self, tight_ctrs):
+        """
+        A method to get average of binding constraints
+        """
+        # normalize
+        tight_ctrs = tight_ctrs / (tight_ctrs.norm(dim=2, keepdim=True) + 1e-8)
+        return tight_ctrs.mean(dim=1).detach()
 
 
 class avgConeAlignedCosine(abstractConeAlignedCosine):
@@ -349,7 +406,7 @@ def _checkInCone(cp, ctr):
     """
     Method to check if the given cost vector in the cone
     """
-    # to numoy
+    # to numpy
     cp = cp.detach().cpu().numpy()
     ctr = ctr.detach().cpu().numpy()
     # drop pads
