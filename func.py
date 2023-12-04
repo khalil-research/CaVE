@@ -112,6 +112,9 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         # get device
         device = pred_cost.device
+        # to numpy
+        pred_cost = pred_cost.detach().cpu().numpy()
+        tight_ctrs = tight_ctrs.detach().cpu().numpy()
         # single-core
         if self.processes == 1:
             # init loss
@@ -140,9 +143,6 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with gurobi
         """
-        # to numpy
-        cp = cp.detach().cpu().numpy()
-        ctr = ctr.detach().cpu().numpy()
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # ceate a model
@@ -172,9 +172,6 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with Clarabel
         """
-        # to numpy
-        cp = cp.detach().cpu().numpy()
-        ctr = ctr.detach().cpu().numpy()
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # varibles
@@ -184,8 +181,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # ceate a model
         problem = cvx.Problem(objective)
         # solve and focus on numeric problem
-        problem.solve(solver=cvx.CLARABEL,
-                      tol_infeas_rel=1e-3, tol_feas=1e-3, max_iter=20)
+        problem.solve(solver=cvx.CLARABEL)
         # get solutions
         p = λ.value @ ctr
         # get value
@@ -197,9 +193,6 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         A static method to solve quadratic programming with scipy
         """
-        # to numpy
-        cp = cp.detach().cpu().numpy()
-        ctr = ctr.detach().cpu().numpy()
         # drop pads
         ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
         # solve the linear equations
@@ -240,8 +233,13 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         """
         # get device
         device = pred_cost.device
+        # get average
+        avg = self._getAvg(tight_ctrs)
         # solve QP
         if np.random.uniform() <= self.solve_ratio:
+            # to numpy
+            pred_cost = pred_cost.detach().cpu().numpy()
+            tight_ctrs = tight_ctrs.detach().cpu().numpy()
              # single-core
             if self.processes == 1:
                 # init loss
@@ -258,16 +256,12 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
                 rnorm = torch.tensor(rnorm).to(device)
             # normalize
             proj = proj / proj.norm(dim=1, keepdim=True)
-            # get average
-            avg = self._getAvg(tight_ctrs)
             # combine vector
             vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
             # projection is itself if in the cone
             vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
         # fake projection
         else:
-            # get average
-            avg = self._getAvg(tight_ctrs)
             # normalize
             pred_norm = pred_cost / pred_cost.norm(dim=1, keepdim=True)
             # combine vector
