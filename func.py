@@ -320,7 +320,7 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
         # cone check
         if self.check_cone:
             # update projection
-            _updateProjectionIfInCone(vecs, pred_cost, tight_ctrs,
+            _updateProjectionIfInCone(vec, pred_cost, tight_ctrs,
                                       self.processes, self.pool)
         return vec.detach()
 
