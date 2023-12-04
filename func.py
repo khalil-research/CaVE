@@ -93,8 +93,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
-            reduction (str): the reduction to apply to the output
             solver (str): the QP solver to find projection
+            reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of coress
         """
         super().__init__(optmodel, reduction, processes)
@@ -125,8 +125,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
             proj, _ = zip(*res)
             proj = torch.stack(proj, dim=0).to(device)
         # normalize
-        proj = proj / proj.norm(dim=1, keepdim=True)
-        return proj
+        vec = proj / proj.norm(dim=1, keepdim=True)
+        return vec
 
     @staticmethod
     def _solveQP(cp, ctr):
@@ -211,18 +211,28 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
 
 
 class innerConeAlignedCosine(exactConeAlignedCosine):
-    def __init__(self, optmodel, solver=None, inner_ratio=0.2,
-                 reduction="mean", processes=1):
+    def __init__(self, optmodel, solver=None, solve_ratio=1,
+                 inner_ratio=0.2, reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
-            reduction (str): the reduction to apply to the output
             solver (str): the QP solver to find projection
+            solve_ratio (float): the ratio of solving QP during training
             inner_ratio (float): the ratio to push projection inside
+            reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of coress
         """
         super().__init__(optmodel, solver, reduction, processes)
+        # solve ratio
+        self.solve_ratio = solve_ratio
+        if (self.solve_ratio < 0) or (self.solve_ratio > 1):
+            raise ValueError("Invalid solving ratio {}. It should be between 0 and 1.".
+                format(self.solve_ratio))
+        # inner ratio
         self.inner_ratio = inner_ratio
+        if (self.inner_ratio < 0) or (self.inner_ratio > 1):
+            raise ValueError("Invalid inner ratio {}. It should be between 0 and 1.".
+                format(self.inner_ratio))
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -230,29 +240,39 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         """
         # get device
         device = pred_cost.device
-        # single-core
-        if self.processes == 1:
-            # init loss
-            proj = torch.empty(pred_cost.shape).to(device)
-            rnorm = torch.empty(pred_cost.shape[0]).to(device)
-            # calculate projection
-            for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                proj[i], rnorm[i] = self._solveQP(cp, ctr)
-        # multi-core
+        # solve QP
+        if np.random.uniform() <= self.solve_ratio:
+             # single-core
+            if self.processes == 1:
+                # init loss
+                proj = torch.empty(pred_cost.shape).to(device)
+                rnorm = torch.empty(pred_cost.shape[0]).to(device)
+                # calculate projection
+                for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
+                    proj[i], rnorm[i] = self._solveQP(cp, ctr)
+            # multi-core
+            else:
+                res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
+                proj, rnorm = zip(*res)
+                proj = torch.stack(proj, dim=0).to(device)
+                rnorm = torch.tensor(rnorm).to(device)
+            # normalize
+            proj = proj / proj.norm(dim=1, keepdim=True)
+            # get average
+            avg = self._getAvg(tight_ctrs)
+            # combine vector
+            vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
+            # projection is itself if in the cone
+            vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
+        # fake projection
         else:
-            res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
-            proj, rnorm = zip(*res)
-            proj = torch.stack(proj, dim=0).to(device)
-            rnorm = torch.tensor(rnorm).to(device)
-        # normalize
-        proj = proj / proj.norm(dim=1, keepdim=True)
-        # get average
-        avg = self._getAvg(tight_ctrs)
-        # combine vector
-        vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
-        # projection is itself if in the cone
-        vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
-        return vec
+            # get average
+            avg = self._getAvg(tight_ctrs)
+            # normalize
+            pred_norm = pred_cost / pred_cost.norm(dim=1, keepdim=True)
+            # combine vector
+            vec = (1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg
+        return vec.detach()
 
     def _getAvg(self, tight_ctrs):
         """
@@ -267,16 +287,23 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss via average base vectors
     """
-    def __init__(self, optmodel, check_cone=False, reduction="mean", processes=1):
+    def __init__(self, optmodel, check_cone=False, inner_ratio=0.2,
+                 reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
-            reduction (str): the reduction to apply to the output
             check_cone (bool): if check the cost vector in the cone or not
+            inner_ratio (float): the ratio to push projection inside
+            reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
         super().__init__(optmodel, reduction, processes)
         self.check_cone = check_cone
+        # inner ratio
+        self.inner_ratio = inner_ratio
+        if (self.inner_ratio < 0) or (self.inner_ratio > 1):
+            raise ValueError("Invalid inner ratio {}. It should be between 0 and 1.".
+                format(self.inner_ratio))
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -285,31 +312,42 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
         # normalize
         tight_ctrs = tight_ctrs / (tight_ctrs.norm(dim=2, keepdim=True) + 1e-8)
         # get average
-        vecs = tight_ctrs.mean(dim=1).detach()
+        avg = tight_ctrs.mean(dim=1).detach()
+        # normalize
+        pred_norm = pred_cost / pred_cost.norm(dim=1, keepdim=True)
+        # combine vector
+        vec = (1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg
         # cone check
         if self.check_cone:
             # update projection
             _updateProjectionIfInCone(vecs, pred_cost, tight_ctrs,
                                       self.processes, self.pool)
-        return vecs
+        return vec.detach()
 
 
 class samplingConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss from sampling
     """
-    def __init__(self, optmodel, n_samples=10, reduction="mean", check_cone=False, processes=1):
+    def __init__(self, optmodel, n_samples=10, check_cone=False, inner_ratio=0.2,
+                 reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
             n_samples (int): number of samples
-            reduction (str): the reduction to apply to the output
             check_cone (bool): if check the cost vector in the cone or not
+            inner_ratio (float): the ratio to push projection inside
+            reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
         super().__init__(optmodel, reduction, processes)
         self.n_samples = n_samples
         self.check_cone = check_cone
+        # inner ratio
+        self.inner_ratio = inner_ratio
+        if (self.inner_ratio < 0) or (self.inner_ratio > 1):
+            raise ValueError("Invalid inner ratio {}. It should be between 0 and 1.".
+                format(self.inner_ratio))
 
     def _calLoss(self, pred_cost, tight_ctrs, optmodel):
         """
@@ -320,7 +358,12 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
             # minimize
             pred_cost = - pred_cost
         # get samples
-        vecs = self._getProjection(pred_cost, tight_ctrs)
+        samples = self._getProjection(pred_cost, tight_ctrs)
+        # normalize
+        pred_norm = (pred_cost / pred_cost.norm(dim=1, keepdim=True)).unsqueeze(1)
+        # combine vector
+        vecs = (1 - self.inner_ratio) * pred_norm + self.inner_ratio * samples
+        vecs = vecs.detach()
         # calculate cosine similarity
         cos_sim = F.cosine_similarity(pred_cost.unsqueeze(1), vecs, dim=2)
         # get max cosine similarity for each sample
@@ -354,16 +397,23 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to quickly align vector to the subset (hyperquadrant) of cone cosine similarity loss
     """
-    def __init__(self, optmodel, check_cone=False, reduction="mean", processes=1):
+    def __init__(self, optmodel, check_cone=False, inner_ratio=0.2,
+                 reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
-            reduction (str): the reduction to apply to the output
             check_cone (bool): if check the cost vector in the cone or not
+            inner_ratio (float): the ratio to push projection inside
+            reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of cores
         """
         super().__init__(optmodel, reduction, processes)
         self.check_cone = check_cone
+        # inner ratio
+        self.inner_ratio = inner_ratio
+        if (self.inner_ratio < 0) or (self.inner_ratio > 1):
+            raise ValueError("Invalid inner ratio {}. It should be between 0 and 1.".
+                format(self.inner_ratio))
 
     def _getProjection(self, pred_cost, tight_ctrs):
         """
@@ -375,12 +425,16 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
         proj = pred_cost * (torch.sign(pred_cost) == torch.sign(sign))
         # normalize
         proj = proj / proj.norm(dim=1, keepdim=True)
+        # normalize
+        pred_norm = pred_cost / pred_cost.norm(dim=1, keepdim=True)
+        # combine vector
+        vec = (1 - self.inner_ratio) * pred_norm + self.inner_ratio * proj
         # cone check
         if self.check_cone:
             # update projection
             _updateProjectionIfInCone(proj, pred_cost, tight_ctrs,
                                       self.processes, self.pool)
-        return proj.detach()
+        return vec.detach()
 
 
 def _updateProjectionIfInCone(proj, pred_cost, tight_ctrs, processes, pool):
