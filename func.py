@@ -181,7 +181,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # ceate a model
         problem = cvx.Problem(objective)
         # solve and focus on numeric problem
-        problem.solve(solver=cvx.CLARABEL)
+        problem.solve(solver=cvx.CLARABEL, tol_infeas_rel=1e-3, tol_feas=1e-3, max_iter=20)
         # get solutions
         p = λ.value @ ctr
         # get value
@@ -281,7 +281,7 @@ class avgConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss via average base vectors
     """
-    def __init__(self, optmodel, check_cone=False, inner_ratio=0.2,
+    def __init__(self, optmodel, check_cone=False, inner_ratio=0.3,
                  reduction="mean", processes=1):
         """
         Args:
@@ -323,7 +323,7 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to align cone and vector cosine similarity loss from sampling
     """
-    def __init__(self, optmodel, n_samples=10, check_cone=False, inner_ratio=0.2,
+    def __init__(self, optmodel, n_samples=10, check_cone=False, inner_ratio=0.3,
                  reduction="mean", processes=1):
         """
         Args:
@@ -391,7 +391,7 @@ class signConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module to quickly align vector to the subset (hyperquadrant) of cone cosine similarity loss
     """
-    def __init__(self, optmodel, check_cone=False, inner_ratio=0.2,
+    def __init__(self, optmodel, check_cone=False, inner_ratio=0.3,
                  reduction="mean", processes=1):
         """
         Args:
