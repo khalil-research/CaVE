@@ -382,7 +382,7 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
         # cone check
         if self.check_cone:
             # update projection
-            _updateProjectionIfInCone(vecs, pred_cost, tight_ctrs,
+            _updateProjectionIfInCone(vecs, pred_cost.unsqueeze(1), tight_ctrs,
                                       self.processes, self.pool)
         return vecs.detach()
 
