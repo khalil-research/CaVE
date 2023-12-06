@@ -180,8 +180,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         objective = cvx.Minimize(cvx.sum_squares(cp - λ @ ctr))
         # ceate a model
         problem = cvx.Problem(objective)
-        # solve and focus on numeric problem
-        problem.solve(solver=cvx.CLARABEL, tol_infeas_rel=1e-3, tol_feas=1e-3, max_iter=20)
+        # solve and set time limit
+        problem.solve(solver=cvx.CLARABEL, max_iter=3)
         # get solutions
         p = λ.value @ ctr
         # get value
