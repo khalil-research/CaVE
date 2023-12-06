@@ -104,11 +104,12 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         super().__init__(optmodel, reduction, processes)
         # solver
-        if solver == "gurobi":
+        self.solver = solver
+        if self.solver == "gurobi":
             self._solveQP = self._solveGurobi
-        if solver == "clarabel":
+        if self.solver == "clarabel":
             self._solveQP = self._solveClarabel
-        if solver == "nnls":
+        if self.solver == "nnls":
             self._solveQP = self._solveNNLS
 
     def _getProjection(self, pred_cost, tight_ctrs):
@@ -186,7 +187,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         # ceate a model
         problem = cvx.Problem(objective)
         # solve and set time limit
-        problem.solve(solver=cvx.CLARABEL, max_iter=3)
+        problem.solve(solver=cvx.CLARABEL)
         # get solutions
         p = λ.value @ ctr
         # get value
@@ -209,18 +210,25 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
 
 
 class innerConeAlignedCosine(exactConeAlignedCosine):
-    def __init__(self, optmodel, solver=None, solve_ratio=1,
+    def __init__(self, optmodel, solver=None, max_iter=3, solve_ratio=1,
                  inner_ratio=0.2, reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
             solver (str): the QP solver to find projection
+            max_iter (int): the maximum number of iterations
             solve_ratio (float): the ratio of solving QP during training
             inner_ratio (float): the ratio to push projection inside
             reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of coress
         """
         super().__init__(optmodel, solver, reduction, processes)
+        # maximum iterations
+        if self.solver == "nnls":
+            # default otherwise infeasible
+            self.max_iter = None
+        else:
+            self.max_iter = max_iter
         # solve ratio
         self.solve_ratio = solve_ratio
         if (self.solve_ratio < 0) or (self.solve_ratio > 1):
@@ -252,19 +260,24 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
                 rnorm = torch.empty(pred_cost.shape[0]).to(device)
                 # calculate projection
                 for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                    proj[i], rnorm[i] = self._solveQP(cp, ctr)
+                    proj[i], rnorm[i] = self._solveQP(cp, ctr, self.max_iter)
             # multi-core
             else:
-                res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
+                res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs
+                                     [self.max_iter]*len(pred_cost)).get()
                 proj, rnorm = zip(*res)
                 proj = torch.stack(proj, dim=0).to(device)
                 rnorm = torch.tensor(rnorm).to(device)
             # normalize
             proj = proj / proj.norm(dim=1, keepdim=True)
-            # combine vector
-            vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
-            # projection is itself if in the cone
-            vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
+            if (self.solver == "gurobi") or (self.solver == "clarabel"):
+                # suboptimal
+                vec = proj
+            else:
+                # push vector inside
+                vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
+                # projection is itself if in the cone
+                vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
         # fake projection
         else:
             # normalize
@@ -280,6 +293,72 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         # normalize
         tight_ctrs = tight_ctrs / (tight_ctrs.norm(dim=2, keepdim=True) + 1e-8)
         return tight_ctrs.mean(dim=1).detach()
+
+    @staticmethod
+    def _solveGurobi(cp, ctr, max_iter):
+        """
+        A static method to solve quadratic programming with gurobi
+        """
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
+        # ceate a model
+        m = gp.Model("projection")
+        # turn off output
+        m.Params.outputFlag = 0
+        # numerical precision
+        m.Params.FeasibilityTol = 1e-3
+        m.Params.OptimalityTol = 1e-3
+        # focus on numeric problem
+        m.Params.NumericFocus = 3
+        # limit iterations
+        m.Params.IterationLimit = max_iter
+        # varibles
+        λ = m.addMVar(len(ctr), name="λ")
+        # objective function
+        obj = (cp - λ @ ctr) @ (cp - λ @ ctr)
+        m.setObjective(obj, GRB.MINIMIZE)
+        # solve
+        m.optimize()
+        # get solutions
+        p = λ.X @ ctr
+        # get value
+        rnorm = m.ObjVal
+        return torch.FloatTensor(p), rnorm
+
+    @staticmethod
+    def _solveClarabel(cp, ctr, max_iter):
+        """
+        A static method to solve quadratic programming with Clarabel
+        """
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
+        # varibles
+        λ = cvx.Variable(len(ctr), name="λ", nonneg=True)
+        # onjective function
+        objective = cvx.Minimize(cvx.sum_squares(cp - λ @ ctr))
+        # ceate a model
+        problem = cvx.Problem(objective)
+        # solve and set time limit
+        problem.solve(solver=cvx.CLARABEL, max_iter=max_iter)
+        # get solutions
+        p = λ.value @ ctr
+        # get value
+        rnorm = problem.value
+        return torch.FloatTensor(p), rnorm
+
+    @staticmethod
+    def _solveNNLS(cp, ctr, max_iter):
+        """
+        A static method to solve quadratic programming with scipy
+        """
+        # drop pads
+        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
+        # solve the linear equations
+        λ, rnorm = nnls(ctr.T, cp, maxiter=max_iter)
+        #λ, _ = fnnls(ctr.T, cp, epsilon=1e-5)
+        # get projection
+        p = λ @ ctr
+        return torch.FloatTensor(p), rnorm
 
 
 class avgConeAlignedCosine(abstractConeAlignedCosine):
