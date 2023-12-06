@@ -232,3 +232,12 @@ def collate_fn(batch):
     # pad
     ctrs_padded = pad_sequence(t_ctrs, batch_first=True, padding_value=0)
     return x, c, w, ctrs_padded
+
+def collate_fn_nocost(batch):
+    # seperate data
+    x, w, t_ctrs = zip(*batch)
+    x = torch.stack(x, dim=0)
+    w = torch.stack(w, dim=0)
+    # pad
+    ctrs_padded = pad_sequence(t_ctrs, batch_first=True, padding_value=0)
+    return x, w, ctrs_padded
