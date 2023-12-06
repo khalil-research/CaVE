@@ -35,7 +35,14 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         super().__init__()
         if not isinstance(optmodel, optModel):
             raise TypeError("arg model is not an optModel")
-        self.optmodel = optmodel
+        # cost vectors direction
+        if optmodel.modelSense == EPO.MINIMIZE:
+            # minimize
+            self.vec_sign = -1
+        else:
+            # maximize
+            self.vec_sign = 1
+        # how to aggregate loss
         self.reduction = reduction
         # number of processes
         self.processes = mp.cpu_count() if not processes else processes
@@ -51,7 +58,7 @@ class abstractConeAlignedCosine(nn.Module, ABC):
         """
         Forward pass method.
         """
-        loss = self._calLoss(pred_cost, tight_ctrs, self.optmodel)
+        loss = self._calLoss(pred_cost, tight_ctrs)
         # reduction
         if self.reduction == "mean":
             loss = torch.mean(loss)
@@ -63,14 +70,12 @@ class abstractConeAlignedCosine(nn.Module, ABC):
             raise ValueError("No reduction '{}'.".format(reduction))
         return loss
 
-    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+    def _calLoss(self, pred_cost, tight_ctrs):
         """
         A method to calculate loss.
         """
         # cost vectors direction
-        if optmodel.modelSense == EPO.MINIMIZE:
-            # minimize
-            pred_cost = - pred_cost
+        pred_cost = self.vec_sign * pred_cost
         # get projection
         proj = self._getProjection(pred_cost, tight_ctrs)
         # calculate cosine similarity
@@ -343,14 +348,12 @@ class samplingConeAlignedCosine(abstractConeAlignedCosine):
             raise ValueError("Invalid inner ratio {}. It should be between 0 and 1.".
                 format(self.inner_ratio))
 
-    def _calLoss(self, pred_cost, tight_ctrs, optmodel):
+    def _calLoss(self, pred_cost, tight_ctrs):
         """
         A method to calculate loss
         """
         # cost vectors direction
-        if optmodel.modelSense == EPO.MINIMIZE:
-            # minimize
-            pred_cost = - pred_cost
+        pred_cost = self.vec_sign * pred_cost
         # get samples
         samples = self._getProjection(pred_cost, tight_ctrs)
         # normalize
