@@ -263,7 +263,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
                     proj[i], rnorm[i] = self._solveQP(cp, ctr, self.max_iter)
             # multi-core
             else:
-                res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs
+                res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs,
                                      [self.max_iter]*len(pred_cost)).get()
                 proj, rnorm = zip(*res)
                 proj = torch.stack(proj, dim=0).to(device)
