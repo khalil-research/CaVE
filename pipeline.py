@@ -73,8 +73,12 @@ def pipeline(config):
         print("Evaluation:")
         print(metrics)
         # save data
-        df = pd.concat([df, metrics], ignore_index=True)
+        if df.empty:
+            df = metrics
+        else:
+            df = pd.concat([df, metrics], ignore_index=True)
         df.to_csv(res_path, index=False)
+        print()
 
 
 def getDir(prob_name, mthd_name, num_data, poly_deg):
