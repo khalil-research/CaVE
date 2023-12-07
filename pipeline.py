@@ -98,13 +98,13 @@ def buildModel(prob_name):
     A method to build optimization model
     """
     # SP5
-    if config.prob == "sp5":
+    if prob_name == "sp5":
         optmodel = shortestPathModel(grid=(5,5))
     # TSP20
-    if config.prob == "tsp20":
+    if prob_name == "tsp20":
         optmodel = tspDFJModel(num_nodes=20)
     # TSP50
-    if config.prob == "tsp50":
+    if prob_name == "tsp50":
         optmodel = tspDFJModel(num_nodes=50)
     return optmodel
 
@@ -114,22 +114,22 @@ def genData(prob_name, num_data, poly_deg, seed):
     generate synthetic data
     """
     # SP5
-    if config.prob == "sp5":
+    if prob_name == "sp5":
         feats, costs = pyepo.data.shortestpath.genData(num_data=num_data+1000,
-                                                      num_features=5,
-                                                      grid=(5,5),
-                                                      deg=poly_deg,
-                                                      noise_width=0.5,
-                                                      seed=seed)
+                                                       num_features=5,
+                                                       grid=(5,5),
+                                                       deg=poly_deg,
+                                                       noise_width=0.5,
+                                                       seed=seed)
     # TSP20
-    if config.prob == "tsp20":
+    if prob_name == "tsp20":
         feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
                                               num_features=10,
                                               num_nodes=20,
                                               deg=poly_deg,
                                               noise_width=0.5,
                                               seed=seed)
-    if config.prob == "tsp50":
+    if prob_name == "tsp50":
         feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
                                               num_features=10,
                                               num_nodes=50,
