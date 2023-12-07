@@ -60,8 +60,17 @@ if __name__ == "__main__":
         print(setting)
         # time out
         timeout_min = configs[setting.prob][setting.mthd].timeout_min
-
-        print(mem_gb, num_cpus, instance_logs_path, timeout_min)
+        # create executor
+        executor = submitit.AutoExecutor(folder=instance_logs_path)
+        executor.update_parameters(slurm_additional_parameters={"account": "rrg-khalile2"},
+                                   timeout_min=timeout_min,
+                                   mem_gb=mem_gb,
+                                   cpus_per_task=num_cpus)
+        # run job
+        job = executor.submit(pipeline, setting)
+        jobs.append(job)
+        print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
+        format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
 
     # get outputs
     #outputs = [job.result() for job in jobs]
