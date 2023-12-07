@@ -9,6 +9,8 @@ import os
 import sys
 sys.path.append("~/projects/def-khalile2/botang/caves/")
 
+import submitit
+
 from config import configs
 from pipeline import pipeline
 
