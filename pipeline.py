@@ -54,6 +54,7 @@ def pipeline(config):
         # skip exist experiments
         if i < len(df):
             print("Skip experiment {}.".format(i))
+            print(df.iloc[i:i+1])
             print()
             continue
         # start exp
@@ -167,7 +168,7 @@ if __name__ == "__main__":
     parser.add_argument("--mthd",
                         type=str,
                         default="2s",
-                        choices=["2s", "spo", "pfyl", "cave", "cave+", "caveh", "nce"],
+                        choices=["2s", "cave", "cave+", "caveh", "spo+", "pfyl", "nce"],
                         help="method")
     parser.add_argument("--expnum",
                         type=int,
