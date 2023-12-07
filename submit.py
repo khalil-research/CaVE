@@ -71,6 +71,7 @@ if __name__ == "__main__":
         jobs.append(job)
         print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
         format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
+        print()
 
     # get outputs
     #outputs = [job.result() for job in jobs]

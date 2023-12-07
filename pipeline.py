@@ -109,6 +109,36 @@ def buildModel(prob_name):
     return optmodel
 
 
+def genData(prob_name, num_data, poly_deg, seed):
+    """
+    generate synthetic data
+    """
+    # SP5
+    if config.prob == "sp5":
+        feats, costs = pyepo.data.shortestpath.genData(num_data=num_data+1000,
+                                                      num_features=5,
+                                                      grid=(5,5),
+                                                      deg=poly_deg,
+                                                      noise_width=0.5,
+                                                      seed=seed)
+    # TSP20
+    if config.prob == "tsp20":
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+                                              num_features=10,
+                                              num_nodes=20,
+                                              deg=poly_deg,
+                                              noise_width=0.5,
+                                              seed=seed)
+    if config.prob == "tsp50":
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+                                              num_features=10,
+                                              num_nodes=50,
+                                              deg=poly_deg,
+                                              noise_width=0.5,
+                                              seed=seed)
+    return feats, costs
+
+
 def genDataLoader(optmodel, feats, costs, seed):
     """
     A method to get data loaders with solving optimal solutions
@@ -128,36 +158,6 @@ def genDataLoader(optmodel, feats, costs, seed):
                                   collate_fn=collate_fn, shuffle=True)
     loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
     return loader_train, loader_train_ctr, loader_test
-
-
-def genData(prob_name, num_data, poly_deg, seed):
-    """
-    generate synthetic data
-    """
-    # SP5
-    if config.prob == "sp5":
-        feats, costs = pyepo.data.shortestpath.genData(num_data=num_data+1000,
-                                                      num_features=5,
-                                                      grid=(5,5),
-                                                      deg=poly_deg,
-                                                      noise_width=0.5,
-                                                      seed=seed)
-    # TSP20
-    if config.prob == "tsp20":
-        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
-                                              num_features=5,
-                                              num_nodes=20,
-                                              deg=poly_deg,
-                                              noise_width=0.5,
-                                              seed=seed)
-    if config.prob == "tsp50":
-        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
-                                              num_features=5,
-                                              num_nodes=50,
-                                              deg=poly_deg,
-                                              noise_width=0.5,
-                                              seed=seed)
-    return feats, costs
 
 
 if __name__ == "__main__":
