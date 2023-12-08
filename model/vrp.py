@@ -40,20 +40,10 @@ class vrpModel(optGrbModel):
         self.nodes = list(range(num_nodes))
         self.edges = [(i, j) for i in self.nodes
                       for j in self.nodes if i < j]
-        self.demands = self._getDemands(demands)
+        self.demands = demands
         self.capacity = capacity
         self.num_vehicle = num_vehicle
         super().__init__()
-
-    def _getDemands(self, d):
-        demands_dict = {}
-        k = 0
-        for v in self.nodes:
-            if v == 0:
-                continue
-            demands_dict[v] = d[k]
-            k += 1
-        return demands_dict
 
     def _getModel(self):
         """
@@ -77,7 +67,7 @@ class vrpModel(optGrbModel):
         m.addConstrs(x.sum(i, "*") == 2 for i in self.nodes if i != 0)  # 2 degree
         # activate lazy constraints
         m._x = x
-        m._q = self.demands
+        m._q = {i: self.demands[i-1] for i in self.nodes[1:]}
         m._Q = self.capacity
         m._edges = self.edges
         m.Params.lazyConstraints = 1
@@ -185,6 +175,6 @@ class vrpModel(optGrbModel):
         Returns:
             optModel: new copied model
         """
-        new_model = type(self)(self.num_nodes, list(self.demands.values()),
+        new_model = type(self)(self.num_nodes, self.demands,
                                self.capacity, self.num_vehicle)
         return new_model
