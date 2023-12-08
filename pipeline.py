@@ -24,6 +24,9 @@ from model import tspDFJModel, vrpModel
 
 
 def pipeline(config):
+    # show config
+    print("Config:")
+    print(config)
     # shortest path
     if config.prob[:2] == "sp":
         print("Running experiments for shortest path:")
