@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # experiments configuration
     parser.add_argument("--expnum",
                         type=int,
-                        default=5,
+                        default=10,
                         help="number of experiments")
 
     # data configuration
@@ -52,6 +52,10 @@ if __name__ == "__main__":
 
     # get experiment setting
     setting = parser.parse_args()
+
+    # more mem
+    if setting.prob == "tsp50":
+        mem_gb = 32
 
     # submit
     jobs = []
