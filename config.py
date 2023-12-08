@@ -168,3 +168,57 @@ configs["tsp50"]["nce"].lr = 5e-2
 configs["tsp50"]["nce"].epochs = 20
 configs["tsp50"]["nce"].solve_ratio = 0.05
 configs["tsp50"]["nce"].timeout_min = 30
+
+
+### ========================= VRP20 =========================
+configs["vrp20"] = {}
+
+# 2-stage
+configs["vrp20"]["2s"] = SimpleNamespace()
+configs["vrp20"]["2s"].lr = 5e-2
+configs["vrp20"]["2s"].epochs = 20
+configs["vrp20"]["2s"].timeout_min = 50
+
+# CaVE
+configs["vrp20"]["cave"] = SimpleNamespace()
+configs["vrp20"]["cave"].lr = 5e-2
+configs["vrp20"]["cave"].epochs = 10
+configs["vrp20"]["cave"].solver = "clarabel"
+configs["vrp20"]["cave"].timeout_min = 50
+
+# CaVE+
+configs["vrp20"]["cave+"] = SimpleNamespace()
+configs["vrp20"]["cave+"].lr = 5e-2
+configs["vrp20"]["cave+"].epochs = 10
+configs["vrp20"]["cave+"].solver = "clarabel"
+configs["vrp20"]["cave+"].timeout_min = 50
+
+# CaVE Hybrid
+configs["vrp20"]["caveh"] = SimpleNamespace()
+configs["vrp20"]["caveh"].lr = 5e-2
+configs["vrp20"]["caveh"].epochs = 10
+configs["vrp20"]["caveh"].solver = "clarabel"
+configs["vrp20"]["caveh"].solve_ratio = 0.3
+configs["vrp20"]["caveh"].inner_ratio = 0.2
+configs["vrp20"]["caveh"].timeout_min = 50
+
+# SPO+
+configs["vrp20"]["spo+"] = SimpleNamespace()
+configs["vrp20"]["spo+"].lr = 5e-2
+configs["vrp20"]["spo+"].epochs = 10
+configs["vrp20"]["spo+"].timeout_min = 60
+
+# PFYL
+configs["vrp20"]["pfyl"] = SimpleNamespace()
+configs["vrp20"]["pfyl"].lr = 5e-2
+configs["vrp20"]["pfyl"].epochs = 10
+configs["vrp20"]["pfyl"].n_samples = 1
+configs["vrp20"]["pfyl"].sigma = 1.0
+configs["vrp20"]["pfyl"].timeout_min = 60
+
+# NCE
+configs["vrp20"]["nce"] = SimpleNamespace()
+configs["vrp20"]["nce"].lr = 5e-2
+configs["vrp20"]["nce"].epochs = 20
+configs["vrp20"]["nce"].solve_ratio = 0.05
+configs["vrp20"]["nce"].timeout_min = 50

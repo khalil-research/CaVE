@@ -47,14 +47,14 @@ if __name__ == "__main__":
     parser.add_argument("--prob",
                         type=str,
                         default="sp5",
-                        choices=["sp5", "tsp20", "tsp50"],
+                        choices=["sp5", "tsp20", "tsp50", "vrp20"],
                         help="problem type")
 
     # get experiment setting
     setting = parser.parse_args()
 
     # more mem
-    if setting.prob == "tsp50":
+    if (setting.prob == "tsp50") or (setting.prob == "vrp20"):
         mem_gb = 32
 
     # submit

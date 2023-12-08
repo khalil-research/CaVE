@@ -20,7 +20,7 @@ from pred import linearRegression
 from train import train
 
 from pyepo.model.grb import shortestPathModel
-from model import tspDFJModel
+from model import tspDFJModel, vrpModel
 
 
 def pipeline(config):
@@ -30,6 +30,9 @@ def pipeline(config):
     # travelling salesman
     if config.prob[:3] == "tsp":
         print("Running experiments for traveling salesman:")
+    # vehicle routing
+    if config.prob[:3] == "vrp":
+        print("Running experiments for vehicle routing:")
     # get file path
     res_path = getDir(config.prob, config.mthd, config.data, config.deg)
     # create or load table
@@ -62,6 +65,9 @@ def pipeline(config):
             print("============================================================")
             print("Experiment {}:".format(i))
             print("============================================================")
+        # change demands for each experiments
+        if config.prob == "vrp20":
+            optmodel.demands = np.random.rand(20) * 10
         # generate data
         print("Generating synthetic data...")
         feats, costs = genData(config.prob, config.data, config.deg, seed)
@@ -99,13 +105,24 @@ def buildModel(prob_name):
     """
     # SP5
     if prob_name == "sp5":
+        # set solver
         optmodel = shortestPathModel(grid=(5,5))
     # TSP20
     if prob_name == "tsp20":
+        # set solver
         optmodel = tspDFJModel(num_nodes=20)
     # TSP50
     if prob_name == "tsp50":
+        # set solver
         optmodel = tspDFJModel(num_nodes=50)
+    # VRP20
+    if prob_name == "vrp20":
+        # demands
+        demands = np.random.rand(20) * 10
+        # set solver
+        optmodel = vrpModel(num_nodes=21, demands=demands, capacity=30, num_vehicle=5)
+        # set time limit
+        optmodel._model.Params.timelimit = 30
     return optmodel
 
 
@@ -129,10 +146,19 @@ def genData(prob_name, num_data, poly_deg, seed):
                                               deg=poly_deg,
                                               noise_width=0.5,
                                               seed=seed)
+    # TSP50
     if prob_name == "tsp50":
         feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
                                               num_features=10,
                                               num_nodes=50,
+                                              deg=poly_deg,
+                                              noise_width=0.5,
+                                              seed=seed)
+    # VRP20
+    if prob_name == "vrp20":
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+                                              num_features=10,
+                                              num_nodes=21,
                                               deg=poly_deg,
                                               noise_width=0.5,
                                               seed=seed)
@@ -189,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument("--prob",
                         type=str,
                         default="sp5",
-                        choices=["sp5", "tsp20", "tsp50"],
+                        choices=["sp5", "tsp20", "tsp50", "vrp20"],
                         help="problem type")
 
     # get configuration
