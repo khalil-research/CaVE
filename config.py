@@ -39,13 +39,13 @@ configs["sp5"]["caveh"].epochs = 10
 configs["sp5"]["caveh"].solver = "nnls"
 configs["sp5"]["caveh"].solve_ratio = 0.3
 configs["sp5"]["caveh"].inner_ratio = 0.2
-configs["sp5"]["caveh"].timeout_min = 2
+configs["sp5"]["caveh"].timeout_min = 3
 
 # SPO+
 configs["sp5"]["spo+"] = SimpleNamespace()
 configs["sp5"]["spo+"].lr = 1e-2
 configs["sp5"]["spo+"].epochs = 10
-configs["sp5"]["spo+"].timeout_min = 3
+configs["sp5"]["spo+"].timeout_min = 5
 
 # PFYL
 configs["sp5"]["pfyl"] = SimpleNamespace()
@@ -53,7 +53,7 @@ configs["sp5"]["pfyl"].lr = 1e-2
 configs["sp5"]["pfyl"].epochs = 10
 configs["sp5"]["pfyl"].n_samples = 1
 configs["sp5"]["pfyl"].sigma = 1.0
-configs["sp5"]["pfyl"].timeout_min = 3
+configs["sp5"]["pfyl"].timeout_min = 5
 
 # NCE
 configs["sp5"]["nce"] = SimpleNamespace()
@@ -98,7 +98,7 @@ configs["tsp20"]["caveh"].timeout_min = 3
 configs["tsp20"]["spo+"] = SimpleNamespace()
 configs["tsp20"]["spo+"].lr = 5e-2
 configs["tsp20"]["spo+"].epochs = 10
-configs["tsp20"]["spo+"].timeout_min = 5
+configs["tsp20"]["spo+"].timeout_min = 7
 
 # PFYL
 configs["tsp20"]["pfyl"] = SimpleNamespace()
@@ -106,7 +106,7 @@ configs["tsp20"]["pfyl"].lr = 5e-2
 configs["tsp20"]["pfyl"].epochs = 10
 configs["tsp20"]["pfyl"].n_samples = 1
 configs["tsp20"]["pfyl"].sigma = 1.0
-configs["tsp20"]["pfyl"].timeout_min = 5
+configs["tsp20"]["pfyl"].timeout_min = 7
 
 # NCE
 configs["tsp20"]["nce"] = SimpleNamespace()
@@ -146,13 +146,13 @@ configs["tsp50"]["caveh"].epochs = 10
 configs["tsp50"]["caveh"].solver = "clarabel"
 configs["tsp50"]["caveh"].solve_ratio = 0.3
 configs["tsp50"]["caveh"].inner_ratio = 0.2
-configs["tsp50"]["caveh"].timeout_min = 20
+configs["tsp50"]["caveh"].timeout_min = 30
 
 # SPO+
 configs["tsp50"]["spo+"] = SimpleNamespace()
 configs["tsp50"]["spo+"].lr = 5e-2
 configs["tsp50"]["spo+"].epochs = 10
-configs["tsp50"]["spo+"].timeout_min = 30
+configs["tsp50"]["spo+"].timeout_min = 40
 
 # PFYL
 configs["tsp50"]["pfyl"] = SimpleNamespace()
@@ -160,7 +160,7 @@ configs["tsp50"]["pfyl"].lr = 5e-2
 configs["tsp50"]["pfyl"].epochs = 10
 configs["tsp50"]["pfyl"].n_samples = 1
 configs["tsp50"]["pfyl"].sigma = 1.0
-configs["tsp50"]["pfyl"].timeout_min = 30
+configs["tsp50"]["pfyl"].timeout_min = 40
 
 # NCE
 configs["tsp50"]["nce"] = SimpleNamespace()
