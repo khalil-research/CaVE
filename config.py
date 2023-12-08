@@ -45,7 +45,7 @@ configs["sp5"]["caveh"].timeout_min = 3
 configs["sp5"]["spo+"] = SimpleNamespace()
 configs["sp5"]["spo+"].lr = 1e-2
 configs["sp5"]["spo+"].epochs = 10
-configs["sp5"]["spo+"].timeout_min = 5
+configs["sp5"]["spo+"].timeout_min = 6
 
 # PFYL
 configs["sp5"]["pfyl"] = SimpleNamespace()
@@ -98,7 +98,7 @@ configs["tsp20"]["caveh"].timeout_min = 3
 configs["tsp20"]["spo+"] = SimpleNamespace()
 configs["tsp20"]["spo+"].lr = 5e-2
 configs["tsp20"]["spo+"].epochs = 10
-configs["tsp20"]["spo+"].timeout_min = 7
+configs["tsp20"]["spo+"].timeout_min = 9
 
 # PFYL
 configs["tsp20"]["pfyl"] = SimpleNamespace()
@@ -152,7 +152,7 @@ configs["tsp50"]["caveh"].timeout_min = 30
 configs["tsp50"]["spo+"] = SimpleNamespace()
 configs["tsp50"]["spo+"].lr = 5e-2
 configs["tsp50"]["spo+"].epochs = 10
-configs["tsp50"]["spo+"].timeout_min = 40
+configs["tsp50"]["spo+"].timeout_min = 50
 
 # PFYL
 configs["tsp50"]["pfyl"] = SimpleNamespace()
@@ -206,7 +206,7 @@ configs["vrp20"]["caveh"].timeout_min = 50
 configs["vrp20"]["spo+"] = SimpleNamespace()
 configs["vrp20"]["spo+"].lr = 5e-2
 configs["vrp20"]["spo+"].epochs = 10
-configs["vrp20"]["spo+"].timeout_min = 60
+configs["vrp20"]["spo+"].timeout_min = 80
 
 # PFYL
 configs["vrp20"]["pfyl"] = SimpleNamespace()
