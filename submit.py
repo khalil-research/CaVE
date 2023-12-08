@@ -62,6 +62,7 @@ if __name__ == "__main__":
         print(setting)
         # time out
         timeout_min = configs[setting.prob][setting.mthd].timeout_min
+        timeout_min *= setting.expnum
         # create executor
         executor = submitit.AutoExecutor(folder=instance_logs_path)
         executor.update_parameters(slurm_additional_parameters={"account": "rrg-khalile2"},
