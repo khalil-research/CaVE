@@ -89,7 +89,10 @@ def train(reg, optmodel, prob_name, mthd_name,
     metrics["Test Elapsed"] = elapsed_test
     metrics["Test Regret"] = regret_test
     metrics["Test MSE"] = mse_test
-    metrics = pd.to_numeric(pd.DataFrame([metrics]))
+    # to DataFrame
+    metrics = pd.DataFrame([metrics])
+    # float
+    metrics = metrics.astype(float)
     return metrics
 
 
