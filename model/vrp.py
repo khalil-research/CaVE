@@ -68,13 +68,13 @@ class vrpModel(optGrbModel):
         m.Params.outputFlag = 0
         # varibles
         x = m.addVars(self.edges, name="x", vtype=GRB.BINARY)
-        for u, v in self.edges:
-            x[v, u] = x[u, v]
+        for i, j in self.edges:
+            x[j, i] = x[i, j]
         # sense
         m.modelSense = GRB.MINIMIZE
         # constraints
         m.addConstr(x.sum(0, "*") <= 2 * self.num_vehicle) # depot degree
-        m.addConstrs(x.sum(v, "*") == 2 for v in self.nodes if v != 0)  # 2 degree
+        m.addConstrs(x.sum(i, "*") == 2 for i in self.nodes if i != 0)  # 2 degree
         # activate lazy constraints
         m._x = x
         m._q = self.demands
@@ -145,7 +145,7 @@ class vrpModel(optGrbModel):
             sol (list): solution
 
         Returns:
-            list: a TSP tour
+            list: a VRP tour
         """
         # active edges
         edges = defaultdict(list)
