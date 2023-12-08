@@ -81,15 +81,15 @@ def train(reg, optmodel, prob_name, mthd_name,
     mse_test = pyepo.metric.MSE(reg, loader_test)
     # output
     metrics = {"Train Regret":None, "Test Regret":None,
-           "Train MSE":None, "Test MSE":None,
-           "Train Elapsed":None, "Test Elapsed":None}
+               "Train MSE":None, "Test MSE":None,
+               "Train Elapsed":None, "Test Elapsed":None}
     metrics["Train Elapsed"] = elapsed_train
     metrics["Train Regret"] = regret_train
     metrics["Train MSE"] = mse_train
     metrics["Test Elapsed"] = elapsed_test
     metrics["Test Regret"] = regret_test
     metrics["Test MSE"] = mse_test
-    metrics = pd.DataFrame([metrics])
+    metrics = pd.to_numeric(pd.DataFrame([metrics]))
     return metrics
 
 
