@@ -177,3 +177,14 @@ class vrpModel(optGrbModel):
             tour.append(0)
             route.append(tour)
         return route
+
+    def copy(self):
+        """
+        A method to copy model
+
+        Returns:
+            optModel: new copied model
+        """
+        new_model = type(self)(self.num_nodes, list(self.demands.values()),
+                               self.capacity, self.num_vehicle)
+        return new_model
