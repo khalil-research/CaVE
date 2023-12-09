@@ -10,7 +10,7 @@ import os
 import sys
 sys.path.append("~/projects/def-khalile2/botang/caves/")
 
-#import submitit
+import submitit
 import numpy as np
 
 from config import hparams
@@ -62,6 +62,9 @@ if __name__ == "__main__":
     confset_caveh = {"solve_ratio":np.arange(0.0, 1.0, 0.1),
                      "inner_ratio":np.arange(0.1, 1.0, 0.1)}
 
+    # init job list
+    jobs = []
+
     ############################################################################
     print("Hyperparameters for CaVE+...")
     setting.mthd = "cave+"
@@ -69,11 +72,11 @@ if __name__ == "__main__":
     timeout_min = hparams[setting.prob][setting.mthd].timeout_min
     timeout_min *= setting.expnum
     # create executor
-    #executor = submitit.AutoExecutor(folder=instance_logs_path)
-    #executor.update_parameters(slurm_additional_parameters={"account": "rrg-khalile2"},
-    #                           timeout_min=timeout_min,
-    #                           mem_gb=mem_gb,
-    #                           cpus_per_task=num_cpus)
+    executor = submitit.AutoExecutor(folder=instance_logs_path)
+    executor.update_parameters(slurm_additional_parameters={"account": "rrg-khalile2"},
+                               timeout_min=timeout_min,
+                               mem_gb=mem_gb,
+                               cpus_per_task=num_cpus)
     for max_iter, in itertools.product(*tuple(confset_cavep.values())):
         # get exp setting
         print("Experiment setting:")
@@ -85,11 +88,10 @@ if __name__ == "__main__":
         # res dir
         res_dir = "./res/hparams/miter{}".format(max_iter)
         # run job
-        pipeline(setting, hparams, res_dir)
-        #job = executor.submit(pipeline, setting, hparams, res_dir)
-        #jobs.append(job)
-        #print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
-        #format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
+        job = executor.submit(pipeline, setting, hparams, res_dir)
+        jobs.append(job)
+        print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
+        format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
         print()
 
     ###########################################################################
@@ -99,11 +101,11 @@ if __name__ == "__main__":
     timeout_min = hparams[setting.prob][setting.mthd].timeout_min
     timeout_min *= setting.expnum
     # create executor
-    #executor = submitit.AutoExecutor(folder=instance_logs_path)
-    #executor.update_parameters(slurm_additional_parameters={"account": "rrg-khalile2"},
-    #                           timeout_min=timeout_min,
-    #                           mem_gb=mem_gb,
-    #                           cpus_per_task=num_cpus)
+    executor = submitit.AutoExecutor(folder=instance_logs_path)
+    executor.update_parameters(slurm_additional_parameters={"account": "rrg-khalile2"},
+                               timeout_min=timeout_min,
+                               mem_gb=mem_gb,
+                               cpus_per_task=num_cpus)
     for solve_ratio, inner_ratio in itertools.product(*tuple(confset_caveh.values())):
         # get exp setting
         print("Experiment setting:")
@@ -114,14 +116,13 @@ if __name__ == "__main__":
         print("Hyperparameters:")
         print(hparams[setting.prob][setting.mthd])
         # res dir
-        res_dir = "./res/hparams/sratio{}_iratio{}".format(solve_ratio, inner_ratio)
+        res_dir = "./res/hparams/sratio{:.1f}_iratio{:.1f}".format(solve_ratio, inner_ratio)
         # run job
-        pipeline(setting, hparams, res_dir)
-        #job = executor.submit(pipeline, setting, hparams, res_dir)
-        #jobs.append(job)
-        #print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
-        #format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
+        job = executor.submit(pipeline, setting, hparams, res_dir)
+        jobs.append(job)
+        print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
+        format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
         print()
 
     # get outputs
-    #outputs = [job.result() for job in jobs]
+    outputs = [job.result() for job in jobs]
