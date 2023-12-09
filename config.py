@@ -180,14 +180,14 @@ hparams["vrp20"] = {}
 hparams["vrp20"]["2s"] = SimpleNamespace()
 hparams["vrp20"]["2s"].lr = 5e-2
 hparams["vrp20"]["2s"].epochs = 20
-hparams["vrp20"]["2s"].timeout_min = 50
+hparams["vrp20"]["2s"].timeout_min = 100
 
 # CaVE
 hparams["vrp20"]["cave"] = SimpleNamespace()
 hparams["vrp20"]["cave"].lr = 5e-2
 hparams["vrp20"]["cave"].epochs = 10
 hparams["vrp20"]["cave"].solver = "clarabel"
-hparams["vrp20"]["cave"].timeout_min = 50
+hparams["vrp20"]["cave"].timeout_min = 100
 
 # CaVE+
 hparams["vrp20"]["cave+"] = SimpleNamespace()
@@ -195,7 +195,7 @@ hparams["vrp20"]["cave+"].lr = 5e-2
 hparams["vrp20"]["cave+"].epochs = 10
 hparams["vrp20"]["cave+"].solver = "clarabel"
 hparams["vrp20"]["cave+"].max_iter = 3
-hparams["vrp20"]["cave+"].timeout_min = 50
+hparams["vrp20"]["cave+"].timeout_min = 100
 
 # CaVE Hybrid
 hparams["vrp20"]["caveh"] = SimpleNamespace()
@@ -204,13 +204,13 @@ hparams["vrp20"]["caveh"].epochs = 10
 hparams["vrp20"]["caveh"].solver = "clarabel"
 hparams["vrp20"]["caveh"].solve_ratio = 0.3
 hparams["vrp20"]["caveh"].inner_ratio = 0.2
-hparams["vrp20"]["caveh"].timeout_min = 50
+hparams["vrp20"]["caveh"].timeout_min = 100
 
 # SPO+
 hparams["vrp20"]["spo+"] = SimpleNamespace()
 hparams["vrp20"]["spo+"].lr = 5e-2
 hparams["vrp20"]["spo+"].epochs = 10
-hparams["vrp20"]["spo+"].timeout_min = 80
+hparams["vrp20"]["spo+"].timeout_min = 150
 
 # PFYL
 hparams["vrp20"]["pfyl"] = SimpleNamespace()
@@ -218,11 +218,11 @@ hparams["vrp20"]["pfyl"].lr = 5e-2
 hparams["vrp20"]["pfyl"].epochs = 10
 hparams["vrp20"]["pfyl"].n_samples = 1
 hparams["vrp20"]["pfyl"].sigma = 1.0
-hparams["vrp20"]["pfyl"].timeout_min = 60
+hparams["vrp20"]["pfyl"].timeout_min = 120
 
 # NCE
 hparams["vrp20"]["nce"] = SimpleNamespace()
 hparams["vrp20"]["nce"].lr = 5e-2
 hparams["vrp20"]["nce"].epochs = 20
 hparams["vrp20"]["nce"].solve_ratio = 0.05
-hparams["vrp20"]["nce"].timeout_min = 50
+hparams["vrp20"]["nce"].timeout_min = 100
