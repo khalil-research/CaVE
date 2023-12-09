@@ -11,7 +11,7 @@ sys.path.append("~/projects/def-khalile2/botang/caves/")
 
 import submitit
 
-from config import configs
+from config import hparams
 from pipeline import pipeline
 
 # job submission parameters
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         print("Experiment setting:")
         print(setting)
         # time out
-        timeout_min = configs[setting.prob][setting.mthd].timeout_min
+        timeout_min = hparams[setting.prob][setting.mthd].timeout_min
         timeout_min *= setting.expnum
         # create executor
         executor = submitit.AutoExecutor(folder=instance_logs_path)

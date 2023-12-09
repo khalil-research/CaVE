@@ -15,15 +15,13 @@ from torch import nn
 from func import exactConeAlignedCosine, innerConeAlignedCosine
 from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
 
-from config import configs
-
 def train(reg, optmodel, prob_name, mthd_name,
-          loader_train, loader_train_ctr, loader_test):
+          loader_train, loader_train_ctr, loader_test, hparams):
     """
     A method to train and evaluate a neural net
     """
     # get training config
-    config = configs[prob_name][mthd_name]
+    config = hparams[prob_name][mthd_name]
     # start training
     tick = time.time()
     if mthd_name == "2s":
@@ -38,7 +36,8 @@ def train(reg, optmodel, prob_name, mthd_name,
         trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
     elif mthd_name == "cave+":
         # init loss
-        cave = innerConeAlignedCosine(optmodel, solver=config.solver)
+        cave = innerConeAlignedCosine(optmodel, solver=config.solver,
+                                      max_iter=config.max_iter)
         # train
         trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
     elif mthd_name == "caveh":

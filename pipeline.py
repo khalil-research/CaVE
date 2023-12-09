@@ -21,9 +21,10 @@ from train import train
 
 from pyepo.model.grb import shortestPathModel
 from model import tspDFJModel, vrpModel
+from config import hparams
 
 
-def pipeline(config, res_dir="./res"):
+def pipeline(config, hparams=hparams, res_dir="./res"):
     # show config
     print("Config:")
     print(config)
@@ -79,7 +80,7 @@ def pipeline(config, res_dir="./res"):
         reg = linearRegression(feats.shape[1], costs.shape[1])
         # train and eval
         print("Training...")
-        metrics = train(reg, optmodel, config.prob, config.mthd, *dataloaders)
+        metrics = train(reg, optmodel, config.prob, config.mthd, *dataloaders, hparams)
         print("Evaluation:")
         print(metrics)
         # save data
