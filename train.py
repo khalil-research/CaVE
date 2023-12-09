@@ -28,41 +28,41 @@ def train(reg, optmodel, prob_name, mthd_name,
         # init loss
         mse = nn.MSELoss()
         # train
-        train2S(reg, loader_train, mse, config.lr, config.epochs)
+        loss_log = train2S(reg, loader_train, mse, config.lr, config.epochs)
     elif mthd_name == "cave":
         # init loss
         cave = exactConeAlignedCosine(optmodel, solver=config.solver)
         # train
-        trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
+        loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
     elif mthd_name == "cave+":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver,
                                       max_iter=config.max_iter)
         # train
-        trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
+        loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
     elif mthd_name == "caveh":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver,
                                       solve_ratio=config.solve_ratio,
                                       inner_ratio=config.inner_ratio)
         # train
-        trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
+        loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
     elif mthd_name == "spo+":
         # init loss
         spop = SPOPlus(optmodel)
         # train
-        trainSPO(reg, loader_train, spop, config.lr, config.epochs)
+        loss_log = trainSPO(reg, loader_train, spop, config.lr, config.epochs)
     elif mthd_name == "pfyl":
         # init loss
         pfy = perturbedFenchelYoung(optmodel, n_samples=config.n_samples,
                                     sigma=config.sigma)
         # train
-        trainPFYL(reg, loader_train, pfy, config.lr, config.epochs)
+        loss_log = trainPFYL(reg, loader_train, pfy, config.lr, config.epochs)
     elif mthd_name == "nce":
         nce = NCE(optmodel, solve_ratio=config.solve_ratio,
                   dataset=loader_train.dataset)
         # train
-        trainNCE(reg, loader_train, nce, config.lr, config.epochs)
+        loss_log = trainNCE(reg, loader_train, nce, config.lr, config.epochs)
     else:
         message = "This algorithm {} is not yet implemented".format(mthd_name)
         raise NotImplementedError(message)
@@ -92,7 +92,7 @@ def train(reg, optmodel, prob_name, mthd_name,
     metrics = pd.DataFrame([metrics])
     # float
     metrics = metrics.astype(float)
-    return metrics
+    return metrics, loss_log
 
 
 def train2S(reg, dataloader, loss_func, lr, num_epochs):
@@ -102,6 +102,8 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
     print("2-Stage:")
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
+    # init log
+    loss_log = []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -111,6 +113,7 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
                 cp = reg(x)
                 # loss
                 loss = loss_func(cp, c)
+                loss_log.append(loss.item())
                 # backward pass
                 optimizer.zero_grad()
                 loss.backward()
@@ -118,6 +121,7 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
+    return loss_log
 
 
 def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
@@ -127,6 +131,8 @@ def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
     print("CaVE:")
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
+    # init log
+    loss_log = []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -136,6 +142,7 @@ def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
                 cp = reg(x)
                 # loss
                 loss = loss_func(cp, ctr)
+                loss_log.append(loss.item())
                 # backward pass
                 optimizer.zero_grad()
                 loss.backward()
@@ -143,6 +150,7 @@ def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
+    return loss_log
 
 
 def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
@@ -152,6 +160,8 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
     print("SPO+:")
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
+    # init log
+    loss_log = []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -161,6 +171,7 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
                 cp = reg(x)
                 # loss
                 loss = loss_func(cp, c, w, z)
+                loss_log.append(loss.item())
                 # backward pass
                 optimizer.zero_grad()
                 loss.backward()
@@ -168,6 +179,7 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
+    return loss_log
 
 
 def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
@@ -177,6 +189,8 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
     print("PFYL:")
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
+    # init log
+    loss_log = []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -186,6 +200,7 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
                 cp = reg(x)
                 # loss
                 loss = loss_func(cp, w)
+                loss_log.append(loss.item())
                 # backward pass
                 optimizer.zero_grad()
                 loss.backward()
@@ -193,6 +208,7 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
+    return loss_log
 
 
 def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
@@ -202,6 +218,8 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
     print("NCE:")
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
+    # init log
+    loss_log = []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -211,6 +229,7 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
                 cp = reg(x)
                 # loss
                 loss = loss_func(cp, w)
+                loss_log.append(loss.item())
                 # backward pass
                 optimizer.zero_grad()
                 loss.backward()
@@ -218,3 +237,4 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
+    return loss_log

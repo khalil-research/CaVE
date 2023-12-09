@@ -80,7 +80,11 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         reg = linearRegression(feats.shape[1], costs.shape[1])
         # train and eval
         print("Training...")
-        metrics = train(reg, optmodel, config.prob, config.mthd, *dataloaders, hparams)
+        metrics, loss_log = train(reg, optmodel, config.prob, config.mthd,
+                                  *dataloaders, hparams)
+        # save loss
+        saveLoss(loss_log, res_path, i)
+        # show metrics
         print("Evaluation:")
         print(metrics)
         # save data
@@ -89,6 +93,7 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         else:
             df = pd.concat([df, metrics], ignore_index=True)
         df.to_csv(res_path, index=False)
+        print("Save metrics to", res_path)
         print()
 
 
@@ -188,6 +193,15 @@ def genDataLoader(optmodel, feats, costs, seed):
                                   collate_fn=collate_fn, shuffle=True)
     loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
     return loader_train, loader_train_ctr, loader_test
+
+
+def saveLoss(loss_log, res_path, exp_ind):
+    """
+    A method to save loss as csv
+    """
+    save_path = res_path[:-4] + "_loss_{}.csv".format(exp_ind)
+    np.savetxt(save_path, np.array(loss_log), delimiter=",")
+    print("Save loss to", save_path)
 
 
 if __name__ == "__main__":
