@@ -96,7 +96,7 @@ def getDir(res_dir, prob_name, mthd_name, num_data, poly_deg):
     A method to get file path of csv result
     """
     # results
-    res_dir = res_dir + "/{}/n{}deg{}".format(prob_name, num_data, poly_deg)
+    res_dir += "/{}/n{}deg{}".format(prob_name, num_data, poly_deg)
     os.makedirs(res_dir, exist_ok=True)
     res_path = res_dir + "/{}.csv".format(mthd_name)
     return res_path
