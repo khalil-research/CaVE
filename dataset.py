@@ -28,7 +28,7 @@ class optDatasetConstrs(Dataset):
         ctrs (list(np.ndarray)): active constraints
     """
 
-    def __init__(self, model, feats, costs=None, sols=None):
+    def __init__(self, model, feats, costs=None, sols=None, skip_infeas=False):
         """
         A method to create a optDataset from optModel
 
@@ -37,12 +37,15 @@ class optDatasetConstrs(Dataset):
             feats (np.ndarray): data features
             costs (np.ndarray): costs of objective function
             sols (np.ndarray): optimal solutions
+            skip_infeas (bool): if True, skip infeasible data points
         """
         if not isinstance(model, optModel):
             raise TypeError("arg model is not an optModel")
         if (costs is None) and (sols is None):
             raise ValueError("At least one of 'costs' or 'sols' must be provided.")
         self.model = model
+        # drop infeasibe or get error
+        self.skip_infeas = skip_infeas
         # data
         self.feats = feats
         # find optimal solutions and tight constraints
@@ -59,21 +62,28 @@ class optDatasetConstrs(Dataset):
         """
         A method to get optimal solutions for all cost vectors
         """
-        sols, ctrs = [], []
+        sols, ctrs, valid_ind = [], [], []
         print("Optimizing for optDataset...")
         time.sleep(1)
-        for c in tqdm(self.costs):
+        tbar = tqdm(self.costs)
+        for i, c in enumerate(tbar):
             try:
                 # solve
                 sol, model = self._solve(c)
                 # get constrs
                 constrs = self._getBindingConstrs(model)
-            except:
-                raise ValueError(
-                    "For optModel, the method 'solve' should return solution vector and objective value."
-                )
+            except AttributeError as e:
+                if self.skip_infeas:
+                    tbar.write("No feasible solution! Drop instance {}.".format(i))
+                    continue  # skip this data point
+                else:
+                    raise ValueError("No feasible solution!")  # raise the exception
             sols.append(sol)
             ctrs.append(np.array(constrs))
+            valid_ind.append(i)
+        # update feats and costs to keep only valid entries
+        self.feats = self.feats[valid_ind]
+        self.costs = self.costs[valid_ind]
         return np.array(sols), ctrs
 
     def _getCtrs(self):
