@@ -125,4 +125,4 @@ if __name__ == "__main__":
         print()
 
     # get outputs
-    outputs = [job.result() for job in jobs]
+    #outputs = [job.result() for job in jobs]
