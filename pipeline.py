@@ -23,7 +23,7 @@ from pyepo.model.grb import shortestPathModel
 from model import tspDFJModel, vrpModel
 
 
-def pipeline(config):
+def pipeline(config, res_dir="./res"):
     # show config
     print("Config:")
     print(config)
@@ -37,7 +37,7 @@ def pipeline(config):
     if config.prob[:3] == "vrp":
         print("Running experiments for vehicle routing:")
     # get file path
-    res_path = getDir(config.prob, config.mthd, config.data, config.deg)
+    res_path = getDir(res_dir, config.prob, config.mthd, config.data, config.deg)
     # create or load table
     if os.path.isfile(res_path): # exist res
         df = pd.read_csv(res_path)
@@ -91,12 +91,12 @@ def pipeline(config):
         print()
 
 
-def getDir(prob_name, mthd_name, num_data, poly_deg):
+def getDir(res_dir, prob_name, mthd_name, num_data, poly_deg):
     """
     A method to get file path of csv result
     """
     # results
-    res_dir = "./res/{}/n{}deg{}".format(prob_name, num_data, poly_deg)
+    res_dir = res_dir + "/{}/n{}deg{}".format(prob_name, num_data, poly_deg)
     os.makedirs(res_dir, exist_ok=True)
     res_path = res_dir + "/{}.csv".format(mthd_name)
     return res_path
