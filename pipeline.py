@@ -45,7 +45,8 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
     else:
         colnames = ["Train Regret", "Test Regret",
                     "Train MSE", "Test MSE",
-                    "Train Elapsed", "Test Elapsed"]
+                    "Train Elapsed", "Test Elapsed",
+                    "Train Nodes Count", "Test Nodes Count"]
         df = pd.DataFrame(columns=colnames)
     # build model
     optmodel = buildModel(config.prob)

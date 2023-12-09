@@ -14,6 +14,7 @@ from torch import nn
 
 from func import exactConeAlignedCosine, innerConeAlignedCosine
 from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
+import metric
 
 def train(reg, optmodel, prob_name, mthd_name,
           loader_train, loader_train_ctr, loader_test, hparams):
@@ -70,9 +71,9 @@ def train(reg, optmodel, prob_name, mthd_name,
     # record time
     elapsed_train = tock - tick
     # regret
-    regret_train = pyepo.metric.regret(reg, optmodel, loader_train)
+    regret_train, nodes_train = metric.regret(reg, optmodel, loader_train)
     tick = time.time()
-    regret_test = pyepo.metric.regret(reg, optmodel, loader_test)
+    regret_test, nodes_test = metric.regret(reg, optmodel, loader_test)
     tock = time.time()
     elapsed_test = tock - tick
     # mse
@@ -81,13 +82,16 @@ def train(reg, optmodel, prob_name, mthd_name,
     # output
     metrics = {"Train Regret":None, "Test Regret":None,
                "Train MSE":None, "Test MSE":None,
-               "Train Elapsed":None, "Test Elapsed":None}
+               "Train Elapsed":None, "Test Elapsed":None,
+               "Train Nodes Count":None, "Test Nodes Count":None}
     metrics["Train Elapsed"] = elapsed_train
     metrics["Train Regret"] = regret_train
     metrics["Train MSE"] = mse_train
+    metrics["Train Nodes Count"] = nodes_train
     metrics["Test Elapsed"] = elapsed_test
     metrics["Test Regret"] = regret_test
     metrics["Test MSE"] = mse_test
+    metrics["Test Nodes Count"] = nodes_test
     # to DataFrame
     metrics = pd.DataFrame([metrics])
     # float
