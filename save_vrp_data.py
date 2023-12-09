@@ -93,8 +93,7 @@ if __name__ == "__main__":
                                cpus_per_task=num_cpus)
 
     # run job
-    job = executor.submit(pipeline, setting)
-    jobs.append(job)
+    job = executor.submit(saveVRPData)
     print("job_id: {}, mem_gb: {}, num_cpus: {}, logs: {}, timeout: {}".
     format(job.job_id, mem_gb, num_cpus, instance_logs_path, timeout_min))
     print()
