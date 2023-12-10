@@ -84,7 +84,9 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         metrics, loss_log = train(reg, optmodel, config.prob, config.mthd,
                                   *dataloaders, hparams, config.rel)
         # save loss
-        saveLoss(loss_log, res_path, i)
+        if i == 0:
+            # only first experiments
+            saveLoss(loss_log, res_path, i)
         # show metrics
         print("Evaluation:")
         print(metrics)
