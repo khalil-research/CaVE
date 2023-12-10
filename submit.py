@@ -20,9 +20,6 @@ mem_gb = 16
 num_cpus = 8
 os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus)
 
-# all methods
-methods = ["2s", "cave", "cave+", "caveh", "spo+", "pfyl", "nce"]
-
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -32,6 +29,12 @@ if __name__ == "__main__":
                         type=int,
                         default=10,
                         help="number of experiments")
+    parser.add_argument("--rel",
+                        action="store_true",
+                        help="train with relaxation model")
+    parser.add_argument("--rel",
+                        action="store_true",
+                        help="train with relaxation model")
 
     # data configuration
     parser.add_argument("--data",
@@ -52,6 +55,12 @@ if __name__ == "__main__":
 
     # get experiment setting
     setting = parser.parse_args()
+
+    # all methods
+    if setting.rel:
+        methods = ["2s", "cave", "cave+", "caveh", "spo+", "pfyl", "nce"]
+    else:
+        methods = ["spo+", "pfyl"]
 
     # more mem
     if (setting.prob == "tsp50") or (setting.prob == "vrp20"):

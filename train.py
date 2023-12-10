@@ -14,13 +14,19 @@ from torch import nn
 
 from func import exactConeAlignedCosine, innerConeAlignedCosine
 from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
+from pyepo.model.grb import tspMTZModel
 import metric
 
 def train(reg, optmodel, prob_name, mthd_name,
-          loader_train, loader_train_ctr, loader_test, hparams):
+          loader_train, loader_train_ctr, loader_test, hparams, relaxed):
     """
     A method to train and evaluate a neural net
     """
+    if prob_name[:3] != "tsp" and relaxed:
+        raise Exception("Relaxed model does not exist")
+    elif prob_name[:3] == "tsp" and relaxed:
+        print("Using relaxation of TSP-MTZ for training...")
+        optmodel_rel = tspMTZModel(optmodel.num_nodes).relax()
     # get training config
     config = hparams[prob_name][mthd_name]
     # start training
@@ -50,13 +56,20 @@ def train(reg, optmodel, prob_name, mthd_name,
         loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
     elif mthd_name == "spo+":
         # init loss
-        spop = SPOPlus(optmodel)
+        if relaxed:
+            spop = SPOPlus(optmodel_rel)
+        else:
+            spop = SPOPlus(optmodel)
         # train
         loss_log = trainSPO(reg, loader_train, spop, config.lr, config.epochs)
     elif mthd_name == "pfyl":
         # init loss
-        pfy = perturbedFenchelYoung(optmodel, n_samples=config.n_samples,
-                                    sigma=config.sigma)
+        if relaxed:
+            pfy = perturbedFenchelYoung(optmodel_rel, n_samples=config.n_samples,
+                                        sigma=config.sigma)
+        else:
+            pfy = perturbedFenchelYoung(optmodel, n_samples=config.n_samples,
+                                        sigma=config.sigma)
         # train
         loss_log = trainPFYL(reg, loader_train, pfy, config.lr, config.epochs)
     elif mthd_name == "nce":

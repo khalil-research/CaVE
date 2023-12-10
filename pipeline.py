@@ -38,7 +38,7 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
     if config.prob[:3] == "vrp":
         print("Running experiments for vehicle routing:")
     # get file path
-    res_path = getDir(res_dir, config.prob, config.mthd, config.data, config.deg)
+    res_path = getDir(res_dir, config.prob, config.mthd, config.data, config.deg, config.rel)
     # create or load table
     if os.path.isfile(res_path): # exist res
         df = pd.read_csv(res_path)
@@ -82,7 +82,7 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         # train and eval
         print("Training...")
         metrics, loss_log = train(reg, optmodel, config.prob, config.mthd,
-                                  *dataloaders, hparams)
+                                  *dataloaders, hparams, config.rel)
         # save loss
         saveLoss(loss_log, res_path, i)
         # show metrics
@@ -98,14 +98,17 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         print()
 
 
-def getDir(res_dir, prob_name, mthd_name, num_data, poly_deg):
+def getDir(res_dir, prob_name, mthd_name, num_data, poly_deg, relax):
     """
     A method to get file path of csv result
     """
     # results
     res_dir += "/{}/n{}deg{}".format(prob_name, num_data, poly_deg)
     os.makedirs(res_dir, exist_ok=True)
-    res_path = res_dir + "/{}.csv".format(mthd_name)
+    if relax:
+        res_path = res_dir + "/{}_rel.csv".format(mthd_name)
+    else:
+        res_path = res_dir + "/{}.csv".format(mthd_name)
     return res_path
 
 
@@ -219,6 +222,9 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help="number of experiments")
+    parser.add_argument("--rel",
+                        action="store_true",
+                        help="train with relaxation model")
 
     # data configuration
     parser.add_argument("--data",
