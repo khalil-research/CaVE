@@ -32,9 +32,6 @@ if __name__ == "__main__":
     parser.add_argument("--rel",
                         action="store_true",
                         help="train with relaxation model")
-    parser.add_argument("--rel",
-                        action="store_true",
-                        help="train with relaxation model")
 
     # data configuration
     parser.add_argument("--data",
@@ -58,9 +55,9 @@ if __name__ == "__main__":
 
     # all methods
     if setting.rel:
-        methods = ["2s", "cave", "cave+", "caveh", "spo+", "pfyl", "nce"]
-    else:
         methods = ["spo+", "pfyl"]
+    else:
+        methods = ["2s", "cave", "cave+", "caveh", "spo+", "pfyl", "nce"]
 
     # more mem
     if (setting.prob == "tsp50") or (setting.prob == "vrp20"):
