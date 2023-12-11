@@ -32,7 +32,7 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     total_node_count = 0
     num_solves = 0
     # load data
-    for data in dataloader:
+    for data in tqdm(dataloader):
         x, c, w, z = data
         # cuda
         if next(predmodel.parameters()).is_cuda:
@@ -41,7 +41,7 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
         with torch.no_grad(): # no grad
             cp = predmodel(x).to("cpu").detach().numpy()
         # solve
-        for j in tqdm(range(cp.shape[0])):
+        for j in range(cp.shape[0]):
             try:
                 # accumulate loss
                 loss += calRegret(optmodel, cp[j], c[j].to("cpu").detach().numpy(),
