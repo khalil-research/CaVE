@@ -7,10 +7,11 @@ True regret loss
 import numpy as np
 import torch
 from gurobipy import GRB
+from tqdm import tqdm
 
 from pyepo import EPO
 
-def regret(predmodel, optmodel, dataloader):
+def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     """
     A function to evaluate model performance with normalized true regret
 
@@ -18,6 +19,7 @@ def regret(predmodel, optmodel, dataloader):
         predmodel (nn): a regression neural network for cost prediction
         optmodel (optModel): an PyEPO optimization model
         dataloader (DataLoader): Torch dataloader from optDataSet
+        skip_infeas (bool): if True, skip infeasible data points
 
     Returns:
         float: normalized regret
@@ -39,13 +41,20 @@ def regret(predmodel, optmodel, dataloader):
         with torch.no_grad(): # no grad
             cp = predmodel(x).to("cpu").detach().numpy()
         # solve
-        for j in range(cp.shape[0]):
-            # accumulate loss
-            loss += calRegret(optmodel, cp[j], c[j].to("cpu").detach().numpy(),
+        for j in tqdm(range(cp.shape[0])):
+            try:
+                # accumulate loss
+                loss += calRegret(optmodel, cp[j], c[j].to("cpu").detach().numpy(),
                               z[j].item())
-            # accumulate node count
-            total_node_count += optmodel._model.getAttr(GRB.Attr.NodeCount)
-            num_solves += 1
+                # accumulate node count
+                total_node_count += optmodel._model.getAttr(GRB.Attr.NodeCount)
+                num_solves += 1
+            except AttributeError as e:
+                if self.skip_infeas:
+                    tbar.write("No feasible solution! Drop instance {}.".format(j))
+                    continue  # skip this data point
+                else:
+                    raise ValueError("No feasible solution!")  # raise the exception
         optsum += abs(z).sum().item()
     # turn back train mode
     predmodel.train()
