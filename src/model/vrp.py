@@ -10,7 +10,7 @@ import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
-from model.utils import unionFind
+from src.model.utils import unionFind
 
 from pyepo.model.grb.grbmodel import optGrbModel
 

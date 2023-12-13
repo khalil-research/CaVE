@@ -11,7 +11,7 @@ import gurobipy as gp
 import numpy as np
 from gurobipy import GRB
 
-from model.utils import unionFind
+from src.model.utils import unionFind
 
 from pyepo.model.grb.tsp import tspABModel
 
