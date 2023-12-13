@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+"""
+Unit test for optmodel
+"""
+
 import sys
 import os
 # add the parent directory to the system path
