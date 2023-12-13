@@ -1,3 +1,3 @@
-# Cone-Aligned Vector Estimation: the End-to-End Predict-then-Optimize Method for Binary Linear Programming
+# CaVE: A Cone-Aligned Approach for Fast Predict-then-optimize with Binary Linear Programs
 
-<p align="center"><img width="100%" src="images/ang2.png" /></p>
+<p align="center"><img width="50%" src="images/cone.png" /></p>
