@@ -29,6 +29,33 @@ This repository is the implementation of our paper. CaVE: A Cone-Aligned Approac
 * [PyTorch](http://pytorch.org/)
 * [PyEPO](https://github.com/khalil-research/PyEPO)
 
+## CaVE Loss Modules
+
+### exactConeAlignedCosine
+
+The ``exactConeAlignedCosine`` class is an autograd module for computing the **CaVE Exact** loss.
+
+#### Parameters
+
+- `optmodel` (`optModel`): An instance of the PyEPO optimization model.
+- `solver` (`str`, optional): The QP solver finds the projection. Options include `'clarabel'` and `'nnls'`. The Default is `'clarabel'`.
+- `reduction` (`str`, optional): The reduction to apply to the output. Options include `'mean'`, `'sum'`, and `'none'`. The default is `'mean'`.
+- `processes` (`int`, optional): Number of processors. `1` is for single-core, and `0` is for using all cores. The default is `1`.
+
+### innerConeAlignedCosine
+
+The ``innerConeAlignedCosine`` class is an autograd module for computing the **CaVE+** (`solve_ratio` = 1) and **CaVE Hybrid** (`solve_ratio` < 1) loss.
+
+#### Parameters
+
+- `optmodel` (`optModel`): An instance of the PyEPO optimization model.
+- `solver` (`str`, optional): The QP solver finds the projection. Options include `'clarabel'` and `'nnls'`. The Default is `'clarabel'`.
+- `max_iter` (`int`, optional): The maximum number of iterations for solving the QP during training. The default is `3`.
+- `solve_ratio` (`float`, optional): The ratio of solving QP during training. Ranges from `0` to `1`. The default is `1`.
+- `inner_ratio` (`float`, optional): The ratio to push the projection inside. Ranges from `0` to `1`. The default is `0.2`.
+- `reduction` (`str`, optional): The reduction to apply to the output. Options include `'mean'`, `'sum'`, and `'none'`. The default is `'mean'`.
+- `processes` (`int`, optional): Number of processors. `1` is for single-core, and `0` is for using all cores. The default is `1`.
+
 ## Sample Code
 
 ```python
