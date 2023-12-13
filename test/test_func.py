@@ -121,5 +121,6 @@ class TestInnerConeAlignedCosine(unittest.TestCase):
             # forward pass with cuda
             loss(self.mock_costs.cuda(), self.mock_bctrs.cuda())
 
+
 if __name__ == "__main__":
     unittest.main()
