@@ -26,6 +26,9 @@ class testTSPSolver(unittest.TestCase):
         self.cost = np.random.rand(self.num_nodes*(self.num_nodes-1)//2)
 
     def testSolution(self):
+        """
+        A test to check the feasibility of solution.
+        """
         # optmodel
         optmodel = tspDFJModel(self.num_nodes)
         # set obj
@@ -110,6 +113,9 @@ class testCVRPSolver(unittest.TestCase):
         self.cost = np.random.rand(self.num_nodes*(self.num_nodes+1)//2)
 
     def testSolution(self):
+        """
+        A test to check the feasibility of solution.
+        """
         # optmodel
         optmodel = vrpModel(self.num_nodes+1, self.demands, self.cap, self.num_vehicles)
         # set obj

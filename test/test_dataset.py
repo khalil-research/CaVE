@@ -26,6 +26,9 @@ class testDataset(unittest.TestCase):
         self.mock_costs = np.random.rand(self.num_data, self.len_cost)
 
     def testDatasetCreation(self):
+        """
+        A test to check the soundness of optDatasetConstrs.
+        """
         # optmodel
         optmodel = tspDFJModel(self.num_nodes)
         # creat dataset
