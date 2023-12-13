@@ -8,7 +8,7 @@ This repository is the implementation of our paper. CaVE: A Cone-Aligned Approac
 
 ## Introduction
 
-CaVE (Cone-aligned Vector Estimation) is a cutting-edge machine learning methodology designed for the efficient and accurate solution of predict-then-optimize tasks within the domain of operations research. This innovative approach integrates predictive modeling with optimization algorithms, focusing on Binary Linear Programming (BLP) problems.
+**CaVE** (**Cone-aligned Vector Estimation**) is a cutting-edge machine learning methodology designed for the efficient and accurate solution of **predict-then-optimize** tasks within the domain of operations research. This innovative approach integrates predictive modeling with optimization algorithms, focusing on **Binary Linear Programming** (**BLP**) problems.
 
 ## Key Features
 
