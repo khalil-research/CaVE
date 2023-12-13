@@ -205,10 +205,12 @@ class testCVRPSolver(unittest.TestCase):
         # check each tour
         for tour in tours:
             load = 0
-            for node in tour:
+            # [1:-1] remove the depot on the tour
+            for node in tour[1:-1]:
                 load += self.demands[node-1]
                 # exceeded capacity
                 if load > self.cap:
+                    print("The load of vehicle is {} that exceed the capacity {}".format(load, self.cap))
                     return False
         return True
 
