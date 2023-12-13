@@ -23,7 +23,7 @@ CaVE (Cone-aligned Vector Estimation) is a cutting-edge machine learning methodo
 * [SciPy](https://scipy.org/)
 * [Pathos](https://pathos.readthedocs.io/)
 * [tqdm](https://tqdm.github.io/)
-* [cvxpy](https://www.cvxpy.org/)
+* [CVXPY](https://www.cvxpy.org/)
 * [Clarabel](https://oxfordcontrol.github.io/ClarabelDocs)
 * [Gurobi](https://www.gurobi.com/)
 * [PyTorch](http://pytorch.org/)
