@@ -89,7 +89,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
     """
     A autograd module for CaVE Exact
     """
-    def __init__(self, optmodel, solver=None, reduction="mean", processes=1):
+    def __init__(self, optmodel, solver="clarabel", reduction="mean", processes=1):
         """
         Args:
             optmodel (optModel): an PyEPO optimization model
@@ -184,7 +184,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
     """
     A autograd module for CaVE+ and CaVE Hybrid.
     """
-    def __init__(self, optmodel, solver=None, max_iter=3, solve_ratio=1,
+    def __init__(self, optmodel, solver="clarabel", max_iter=3, solve_ratio=1,
                  inner_ratio=0.2, reduction="mean", processes=1):
         """
         Args:
