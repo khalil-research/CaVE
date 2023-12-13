@@ -21,9 +21,9 @@ class testDataset(unittest.TestCase):
         self.num_nodes = 10
         self.num_data = 5
         self.num_features = 10
-        self.num_costs = self.num_nodes * (self.num_nodes - 1) // 2
+        self.len_cost = self.num_nodes * (self.num_nodes - 1) // 2
         self.mock_feats = np.random.rand(self.num_data, self.num_features)
-        self.mock_costs = np.random.rand(self.num_data, self.num_costs)
+        self.mock_costs = np.random.rand(self.num_data, self.len_cost)
 
     def testDatasetCreation(self):
         # optmodel
