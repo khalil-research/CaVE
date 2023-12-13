@@ -27,8 +27,7 @@ class optDatasetConstrs(Dataset):
         sols (np.ndarray): Optimal solutions
         ctrs (list(np.ndarray)): active constraints
     """
-
-    def __init__(self, model, feats, costs=None, sols=None, skip_infeas=False):
+    def __init__(self, model, feats, costs, skip_infeas=False):
         """
         A method to create a optDataset from optModel
 
@@ -41,22 +40,13 @@ class optDatasetConstrs(Dataset):
         """
         if not isinstance(model, optModel):
             raise TypeError("arg model is not an optModel")
-        if (costs is None) and (sols is None):
-            raise ValueError("At least one of 'costs' or 'sols' must be provided.")
         self.model = model
         # drop infeasibe or get error
         self.skip_infeas = skip_infeas
         # data
         self.feats = feats
-        # find optimal solutions and tight constraints
-        if sols is None:
-            self.costs = costs
-            self.sols, self.ctrs = self._getSols()
-        # get tight constraints with given optimal solution
-        else:
-            self.costs = None
-            self.sols = sols
-            self.ctrs = self._getCtrs()
+        self.costs = costs
+        self.sols, self.ctrs = self._getSols()
 
     def _getSols(self):
         """
@@ -89,21 +79,6 @@ class optDatasetConstrs(Dataset):
         self.costs = self.costs[valid_ind]
         return np.array(sols), ctrs
 
-    def _getCtrs(self):
-        """
-        A method to get the binding constraints from given solution
-        """
-        ctrs = []
-        print("Obtaining constraints for optDataset...")
-        time.sleep(1)
-        for sol in tqdm(self.sols):
-            # give sol
-            model = self._assignSol(sol)
-            # get constrs
-            constrs = self._getBindingConstrs(model)
-            ctrs.append(np.array(constrs))
-        return ctrs
-
     def _solve(self, cost):
         """
         A method to solve optimization problem to get an optimal solution with given cost
@@ -121,29 +96,6 @@ class optDatasetConstrs(Dataset):
         # optimize
         sol, _ = model.solve()
         return sol, model
-
-    def _assignSol(self, sol):
-        """
-        A method to fix model with given solution
-
-        Args:
-            sols (np.ndarray): Optimal solutions
-
-        Returns:
-            model (optModel): Optimization models
-        """
-        # copy model
-        model = self.model.copy()
-        # fix all value
-        for i, var_x in enumerate(model._model.getVars()):
-            var_x.lb = sol[i]
-            var_x.ub = sol[i]
-        # set 0 obj
-        model._model.setObjective(0)
-        # solve
-        model._model.optimize()
-        return model
-
 
     def _getBindingConstrs(self, model):
         """
@@ -223,14 +175,7 @@ class optDatasetConstrs(Dataset):
                    optimal solutions (torch.tensor),
                    objective values (torch.tensor)
         """
-        if self.costs is None:
-            return (
-                torch.FloatTensor(self.feats[index]),
-                torch.FloatTensor(self.sols[index]),
-                torch.FloatTensor(self.ctrs[index])
-            )
-        else:
-            return (
+        return (
                 torch.FloatTensor(self.feats[index]),
                 torch.FloatTensor(self.costs[index]),
                 torch.FloatTensor(self.sols[index]),
