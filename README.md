@@ -27,7 +27,7 @@ Citation:
 - **End-to-End Training:** CaVE seamlessly integrates learning and optimization, delivering state-of-the-art performance in predicting cost coefficients for optimization problems.
 - **Innovative Alignment Strategy:** By aligning predicted cost vectors within a cone, CaVE simplifies the original problem into more manageable quadratic programming.
 - **Versatility and Scalability:** Exceptionally robust in managing large-scale optimization challenges, CaVE is adaptable to various problem sizes and complexities.
-- **Efficiency in Computation:** Markedly improves computational efficiency, streamlining the traditionally more time-consuming and complex end-to-end predict-then-optimize approaches.
+- **Efficiency in Computation:** Markedly improves computational efficiency, streamlining the more time-consuming end-to-end predict-then-optimize approaches.
 
 ## Dependencies
 
