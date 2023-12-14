@@ -133,3 +133,13 @@ for epoch in range(num_epochs):
         print("Epoch {:4.0f}, Loss: {:8.4f}".format(epoch, loss.item()))
 
 ```
+
+## Running the Tests
+
+```
+python run_test.py
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE file](https://github.com/khalil-research/CaVE/blob/main/LICENSE) for details.
