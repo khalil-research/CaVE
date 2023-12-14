@@ -40,7 +40,7 @@ Citation:
 * [PyTorch](http://pytorch.org/)
 * [PyEPO](https://github.com/khalil-research/PyEPO)
 
-## Installation
+## Download
 
 You can download **CaVE** from our GitHub repository.
 
