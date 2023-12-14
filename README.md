@@ -4,7 +4,7 @@
 
 ## Publication
 
-This repository is the implementation of our paper. [CaVE: A Cone-Aligned Approach for Fast Predict-then-optimize with Binary Linear Programs](https://arxiv.org/abs/2312.07718).
+This repository is the implementation of our paper: [CaVE: A Cone-Aligned Approach for Fast Predict-then-optimize with Binary Linear Programs](https://arxiv.org/abs/2312.07718).
 
 Citation:
 ```
