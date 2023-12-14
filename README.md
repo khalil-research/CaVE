@@ -4,7 +4,19 @@
 
 ## Publication
 
-This repository is the implementation of our paper. CaVE: A Cone-Aligned Approach for Fast Predict-then-optimize with Binary Linear Programs.
+This repository is the implementation of our paper. [CaVE: A Cone-Aligned Approach for Fast Predict-then-optimize with Binary Linear Programs](https://arxiv.org/abs/2312.07718).
+
+Citation:
+```
+@misc{tang2023cave,
+      title={CaVE: A Cone-Aligned Approach for Fast Predict-then-optimize with Binary Linear Programs}, 
+      author={Bo Tang and Elias B. Khalil},
+      year={2023},
+      eprint={2312.07718},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
 
 ## Introduction
 
