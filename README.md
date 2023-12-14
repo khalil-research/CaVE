@@ -40,6 +40,14 @@ Citation:
 * [PyTorch](http://pytorch.org/)
 * [PyEPO](https://github.com/khalil-research/PyEPO)
 
+## Installation
+
+You can download **CaVE** from our GitHub repository.
+
+```bash
+git clone -b main --depth 1 https://github.com/khalil-research/CaVE.git
+```
+
 ## CaVE Loss Modules
 
 ### exactConeAlignedCosine
