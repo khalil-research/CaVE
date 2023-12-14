@@ -1,6 +1,6 @@
 # CaVE: Cone-Aligned Vector Estimation
 
-<p align="center"><img width="50%" src="images/cone.png" /></p>
+<p align="center"><img width="50%" src="images/loss.png" /></p>
 
 ## Publication
 
