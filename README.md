@@ -13,8 +13,7 @@ Citation:
       author={Bo Tang and Elias B. Khalil},
       year={2023},
       eprint={2312.07718},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+      archivePrefix={arXiv}
 }
 ```
 
