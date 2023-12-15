@@ -165,7 +165,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         p = λ.value @ ctr
         # compute residuals as the Euclidean distance between prediction and projection
         rnorm = problem.value
-        return torch.tensor(p), rnorm
+        return torch.tensor(p, dtype=torch.float32), rnorm
 
     @staticmethod
     def _solveNNLS(cp, ctr):
@@ -179,7 +179,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         λ, rnorm = nnls(ctr.T, cp)
         # compute residuals as the Euclidean distance between prediction and projection
         p = λ @ ctr
-        return torch.tensor(p), rnorm
+        return torch.tensor(p, dtype=torch.float32), rnorm
 
 
 class innerConeAlignedCosine(exactConeAlignedCosine):
@@ -296,7 +296,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         p = λ.value @ ctr
         # compute residuals as the Euclidean distance between prediction and projection
         rnorm = problem.value
-        return torch.tensor(p), rnorm
+        return torch.tensor(p, dtype=torch.float32), rnorm
 
     @staticmethod
     def _solveNNLS(cp, ctr, max_iter):
@@ -314,4 +314,4 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         λ, rnorm = nnls(ctr.T, cp, maxiter=max_iter)
         # obtain the closest projection on the surface of the cone
         p = λ @ ctr
-        return torch.tensor(p), rnorm
+        return torch.tensor(p, dtype=torch.float32), rnorm
