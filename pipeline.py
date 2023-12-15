@@ -81,8 +81,9 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         reg = linearRegression(feats.shape[1], costs.shape[1])
         # train and eval
         print("Training...")
-        metrics, loss_log = train(reg, optmodel, config.prob, config.mthd,
-                                  *dataloaders, hparams, config.rel)
+        metrics, loss_log, instance_res = train(reg, optmodel, config.prob, config.mthd,
+                                                *dataloaders, hparams, config.rel)
+        instance_res.to_csv(res_path[:-4]+"_{}.csv".format(i), index=False)
         # save loss
         if i == 0:
             # only first experiments

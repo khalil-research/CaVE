@@ -85,10 +85,10 @@ def train(reg, optmodel, prob_name, mthd_name,
     elapsed_train = tock - tick
     # regret
     print("Evaluate training set...")
-    regret_train, nodes_train = metric.regret(reg, optmodel, loader_train)
+    regret_train, nodes_train, _ = metric.regret(reg, optmodel, loader_train)
     print("Evaluate test set...")
     tick = time.time()
-    regret_test, nodes_test = metric.regret(reg, optmodel, loader_test)
+    regret_test, nodes_test, instance_res = metric.regret(reg, optmodel, loader_test)
     tock = time.time()
     elapsed_test = tock - tick
     # mse
@@ -109,7 +109,7 @@ def train(reg, optmodel, prob_name, mthd_name,
     metrics["Test Nodes Count"] = nodes_test
     # to DataFrame
     metrics = pd.DataFrame([metrics])
-    return metrics, loss_log
+    return metrics, loss_log, instance_res
 
 
 def train2S(reg, dataloader, loss_func, lr, num_epochs):

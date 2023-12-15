@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from gurobipy import GRB
 from tqdm import tqdm
+import pandas as pd
 
 from pyepo import EPO
 
@@ -31,6 +32,8 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     optsum = 0
     total_node_count = 0
     num_solves = 0
+    # init instance result
+    regrets, nodes  = [], []
     # load data
     for data in tqdm(dataloader):
         x, c, w, z = data
@@ -44,10 +47,15 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
         for j in range(cp.shape[0]):
             try:
                 # accumulate loss
-                loss += calRegret(optmodel, cp[j], c[j].to("cpu").detach().numpy(),
+                regret = calRegret(optmodel, cp[j], c[j].to("cpu").detach().numpy(),
                               z[j].item())
+                loss += regret
+                regrets.append(regret)
                 # accumulate node count
-                total_node_count += optmodel._model.getAttr(GRB.Attr.NodeCount)
+                node_count = optmodel._model.getAttr(GRB.Attr.NodeCount)
+                total_node_count += node_count
+                nodes.append(node_count)
+                # update solved number
                 num_solves += 1
             except AttributeError as e:
                 if self.skip_infeas:
@@ -56,10 +64,12 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
                 else:
                     raise ValueError("No feasible solution!")  # raise the exception
         optsum += abs(z).sum().item()
+    # get tables for each instance
+    instance_res = pd.DataFrame({"Regret": regrets, "Nodes": node_count})
     # turn back train mode
     predmodel.train()
     # normalized
-    return loss / (optsum + 1e-7), total_node_count / num_solves
+    return loss / (optsum + 1e-7), instance_res["Nodes"].median(), instance_res
 
 
 def calRegret(optmodel, pred_cost, true_cost, true_obj):
