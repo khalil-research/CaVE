@@ -65,7 +65,7 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
                     raise ValueError("No feasible solution!")  # raise the exception
         optsum += abs(z).sum().item()
     # get tables for each instance
-    instance_res = pd.DataFrame({"Regret": regrets, "Nodes": node_count})
+    instance_res = pd.DataFrame({"Regret": regrets, "Nodes": nodes})
     # turn back train mode
     predmodel.train()
     # normalized
