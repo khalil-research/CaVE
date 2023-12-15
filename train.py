@@ -109,8 +109,6 @@ def train(reg, optmodel, prob_name, mthd_name,
     metrics["Test Nodes Count"] = nodes_test
     # to DataFrame
     metrics = pd.DataFrame([metrics])
-    # float
-    metrics = metrics.astype(float)
     return metrics, loss_log
 
 
