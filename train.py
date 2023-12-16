@@ -11,6 +11,7 @@ import pandas as pd
 import pyepo
 import torch
 from torch import nn
+from gurobipy import GRB
 
 from src.cave import exactConeAlignedCosine, innerConeAlignedCosine
 from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
@@ -29,6 +30,9 @@ def train(reg, optmodel, prob_name, mthd_name,
         optmodel_rel = tspMTZModel(optmodel.num_nodes).relax()
     # get training config
     config = hparams[prob_name][mthd_name]
+    # set timelimit
+    if prob_name == "vrp20":
+        optmodel._model.Params.timelimit = 30
     # start training
     tick = time.time()
     if mthd_name == "2s":
@@ -81,6 +85,9 @@ def train(reg, optmodel, prob_name, mthd_name,
         message = "This algorithm {} is not yet implemented".format(mthd_name)
         raise NotImplementedError(message)
     tock = time.time()
+    # remove timelimit
+    if prob_name == "vrp20":
+        optmodel._model.Params.timelimit = GRB.INFINITY
     # record time
     elapsed_train = tock - tick
     # regret

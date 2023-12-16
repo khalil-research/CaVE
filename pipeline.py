@@ -137,8 +137,6 @@ def buildModel(prob_name):
         demands = np.random.rand(20) * 10
         # set solver
         optmodel = vrpModel(num_nodes=21, demands=demands, capacity=30, num_vehicle=5)
-        # set time limit
-        optmodel._model.Params.timelimit = 30
     return optmodel
 
 
