@@ -60,7 +60,7 @@ class optDatasetConstrs(optDataset):
                 # solve
                 sol, obj, model = self._solve(c)
                 # get binding constrs
-                constrs = self._getBindingConstrs(model)
+                constrs = self._getBindingConstrs(model, sol)
             except AttributeError as e:
                 # infeasibe
                 if self.skip_infeas:
@@ -97,12 +97,13 @@ class optDatasetConstrs(optDataset):
         sol, obj = model.solve()
         return sol, obj, model
 
-    def _getBindingConstrs(self, model):
+    def _getBindingConstrs(self, model, sol):
         """
         A method to get tight constraints with current solution
 
         Args:
-            model (optModel): Optimization models
+            model (optModel): optimization models
+            sol (list(float)): optimal solution
 
         Returns:
             np.ndarray: normal vector of constraints
@@ -114,9 +115,14 @@ class optDatasetConstrs(optDataset):
             # add lazy constrs to model
             for constr in model.lazy_constrs:
                 model._model.addConstr(constr)
-        model._model.update()
-        # solve
-        model.solve()
+            # fix the variables to the optimal
+            for var, val in zip(model._model.getVars(), sol):
+                var.setAttr(GRB.Attr.LB, val)  # set the lower bound
+                var.setAttr(GRB.Attr.UB, val)  # set the upper bound
+            # update model
+            model._model.update()
+            # solve
+            model.solve()
         # iterate all constraints
         for constr in model._model.getConstrs():
             # check binding constraints A x == b
