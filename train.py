@@ -18,8 +18,7 @@ from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
 from pyepo.model.grb import tspMTZModel
 import metric
 
-def train(reg, optmodel, prob_name, mthd_name,
-          loader_train, loader_train_ctr, loader_test, hparams, relaxed):
+def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparams, relaxed):
     """
     A method to train and evaluate a neural net
     """
@@ -44,20 +43,20 @@ def train(reg, optmodel, prob_name, mthd_name,
         # init loss
         cave = exactConeAlignedCosine(optmodel, solver=config.solver)
         # train
-        loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
+        loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
     elif mthd_name == "cave+":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver,
                                       max_iter=config.max_iter)
         # train
-        loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
+        loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
     elif mthd_name == "caveh":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver,
                                       solve_ratio=config.solve_ratio,
                                       inner_ratio=config.inner_ratio)
         # train
-        loss_log = trainCaVE(reg, loader_train_ctr, cave, config.lr, config.epochs)
+        loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
     elif mthd_name == "spo+":
         # init loss
         if relaxed:
@@ -92,15 +91,12 @@ def train(reg, optmodel, prob_name, mthd_name,
     elapsed_train = tock - tick
     # regret
     print("Evaluate training set...")
-    regret_train, nodes_train, _ = metric.regret(reg, optmodel, loader_train)
+    regret_train, mse_train, nodes_train, _ = metric.regret(reg, optmodel, loader_train)
     print("Evaluate test set...")
     tick = time.time()
-    regret_test, nodes_test, instance_res = metric.regret(reg, optmodel, loader_test)
+    regret_test, mse_test, nodes_test, instance_res = metric.regret(reg, optmodel, loader_test)
     tock = time.time()
     elapsed_test = tock - tick
-    # mse
-    mse_train = pyepo.metric.MSE(reg, loader_train)
-    mse_test = pyepo.metric.MSE(reg, loader_test)
     # output
     metrics = {"Train Regret":None, "Test Regret":None,
                "Train MSE":None, "Test MSE":None,
@@ -132,7 +128,7 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, c, _, _ = data
+                x, c, _, _, _ = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -161,7 +157,7 @@ def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, _, _, ctr = data
+                x, _, _, _, ctr = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -190,7 +186,7 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, c, w, z = data
+                x, c, w, z, _ = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -219,7 +215,7 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, _, w, _ = data
+                x, _, w, _, _ = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -248,7 +244,7 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, _, w, _ = data
+                x, _, w, _, _ = data
                 # predict
                 cp = reg(x)
                 # loss

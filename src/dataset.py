@@ -10,13 +10,13 @@ from gurobipy import GRB
 import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from pyepo.model.opt import optModel
+from pyepo.data.dataset import optDataset
 
 
-class optDatasetConstrs(Dataset):
+class optDatasetConstrs(optDataset):
     """
     This class is Torch Dataset for optimization problems with binding constraints.
 
@@ -35,7 +35,6 @@ class optDatasetConstrs(Dataset):
             model (optModel): an instance of optModel
             feats (np.ndarray): data features
             costs (np.ndarray): costs of objective function
-            sols (np.ndarray): optimal solutions
             skip_infeas (bool): if True, skip infeasible data points
         """
         if not isinstance(model, optModel):
@@ -46,20 +45,20 @@ class optDatasetConstrs(Dataset):
         # data
         self.feats = feats
         self.costs = costs
-        self.sols, self.ctrs = self._getSols()
+        self.sols, self.objs, self.ctrs = self._getSols()
 
     def _getSols(self):
         """
         A method to get optimal solutions for all cost vectors
         """
-        sols, ctrs, valid_ind = [], [], []
+        sols, objs, ctrs, valid_ind = [], [], [], []
         print("Optimizing for optDataset...")
         time.sleep(1)
         tbar = tqdm(self.costs)
         for i, c in enumerate(tbar):
             try:
                 # solve
-                sol, model = self._solve(c)
+                sol, obj, model = self._solve(c)
                 # get binding constrs
                 constrs = self._getBindingConstrs(model)
             except AttributeError as e:
@@ -72,12 +71,13 @@ class optDatasetConstrs(Dataset):
                     # raise the exception
                     raise ValueError("No feasible solution!")
             sols.append(sol)
+            objs.append([obj])
             ctrs.append(np.array(constrs))
             valid_ind.append(i)
         # update feats and costs to keep only valid entries
         self.feats = self.feats[valid_ind]
         self.costs = self.costs[valid_ind]
-        return np.array(sols), ctrs
+        return np.array(sols), np.array(objs), ctrs
 
     def _solve(self, cost):
         """
@@ -94,8 +94,8 @@ class optDatasetConstrs(Dataset):
         # set obj
         model.setObj(cost)
         # optimize
-        sol, _ = model.solve()
-        return sol, model
+        sol, obj = model.solve()
+        return sol, obj, model
 
     def _getBindingConstrs(self, model):
         """
@@ -179,6 +179,7 @@ class optDatasetConstrs(Dataset):
                 torch.FloatTensor(self.feats[index]),
                 torch.FloatTensor(self.costs[index]),
                 torch.FloatTensor(self.sols[index]),
+                torch.FloatTensor(self.objs[index]),
                 torch.FloatTensor(self.ctrs[index])
             )
 
@@ -188,12 +189,13 @@ def collate_fn(batch):
     A custom collate function for PyTorch DataLoader.
     """
     # seperate batch data
-    x, c, w, t_ctrs = zip(*batch)
+    x, c, w, z, t_ctrs = zip(*batch)
     # stack lists of x, c, and w into new batch tensors
     x = torch.stack(x, dim=0)
     c = torch.stack(c, dim=0)
     w = torch.stack(w, dim=0)
+    z = torch.stack(z, dim=0)
     # pad t_ctrs with 0 to make all sequences have the same length.
     # the number of binding constraints are different.
     ctrs_padded = pad_sequence(t_ctrs, batch_first=True, padding_value=0)
-    return x, c, w, ctrs_padded
+    return x, c, w, z, ctrs_padded

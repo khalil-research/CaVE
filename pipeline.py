@@ -188,16 +188,15 @@ def genDataLoader(optmodel, feats, costs, seed):
                                                         test_size=1000,
                                                         random_state=135)
     # create dataset
-    dataset_train = pyepo.data.dataset.optDataset(optmodel, x_train, c_train)
-    dataset_train_ctr = optDatasetConstrs(optmodel, x_train, c_train)
-    dataset_test = pyepo.data.dataset.optDataset(optmodel, x_test, c_test)
+    dataset_train = optDatasetConstrs(optmodel, x_train, c_train)
+    dataset_test = optDatasetConstrs(optmodel, x_test, c_test)
     # get data loader
     batch_size = 32
-    loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
-    loader_train_ctr = DataLoader(dataset_train_ctr, batch_size=batch_size,
-                                  collate_fn=collate_fn, shuffle=True)
-    loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
-    return loader_train, loader_train_ctr, loader_test
+    loader_train = DataLoader(dataset_train, batch_size=batch_size,
+                              collate_fn=collate_fn, shuffle=True)
+    loader_test = DataLoader(dataset_test, batch_size=batch_size,
+                             collate_fn=collate_fn, shuffle=False)
+    return loader_train, loader_test
 
 
 def saveLoss(loss_log, res_path, exp_ind):

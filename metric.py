@@ -28,29 +28,35 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     """
     # evaluate
     predmodel.eval()
-    loss = 0
+    dloss = 0 # regret
+    ploss = 0 # mse
     optsum = 0
     total_node_count = 0
     num_solves = 0
     # init instance result
-    regrets, nodes  = [], []
+    regrets, mses, nodes = [], [], []
     # load data
     for data in tqdm(dataloader):
-        x, c, w, z = data
-        # cuda
+        x, c, w, z, ctr = data
+        # to cuda if model in cuda
         if next(predmodel.parameters()).is_cuda:
-            x, c, w, z = x.cuda(), c.cuda(), w.cuda(), z.cuda()
+            x = x.cuda()
+        # to numpy
+        c = c.to("cpu").detach().numpy()
         # predict
         with torch.no_grad(): # no grad
             cp = predmodel(x).to("cpu").detach().numpy()
         # solve
         for j in range(cp.shape[0]):
             try:
-                # accumulate loss
-                regret = calRegret(optmodel, cp[j], c[j].to("cpu").detach().numpy(),
-                              z[j].item())
-                loss += regret
+                # accumulate regret
+                regret = calRegret(optmodel, cp[j], c[j], z[j].item())
+                dloss += regret
                 regrets.append(regret)
+                # accumulate mse
+                mse = ((cp[j] - c[j]) ** 2).mean()
+                ploss += mse
+                mses.append(mse)
                 # accumulate node count
                 node_count = optmodel._model.getAttr(GRB.Attr.NodeCount)
                 total_node_count += node_count
@@ -65,11 +71,14 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
                     raise ValueError("No feasible solution!")  # raise the exception
         optsum += abs(z).sum().item()
     # get tables for each instance
-    instance_res = pd.DataFrame({"Regret": regrets, "Nodes": nodes})
+    instance_res = pd.DataFrame({"Regret": regrets, "MSE":mses, "Nodes": nodes})
     # turn back train mode
     predmodel.train()
     # normalized
-    return loss / (optsum + 1e-7), instance_res["Nodes"].median(), instance_res
+    avg_regret = dloss / (optsum + 1e-7)
+    avg_mse = ploss / num_solves
+    median_node = instance_res["Nodes"].median()
+    return avg_regret, avg_mse, median_node, instance_res
 
 
 def calRegret(optmodel, pred_cost, true_cost, true_obj):
