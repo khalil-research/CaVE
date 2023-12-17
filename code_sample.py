@@ -49,7 +49,7 @@ num_epochs = 10
 for epoch in range(num_epochs):
     for data in dataloader:
         # unzip data: only need features and binding constraints
-        x, _, _, bctr = data
+        x, _, _, _, bctr = data
         # predict cost
         cp = reg(x)
         # cave loss
