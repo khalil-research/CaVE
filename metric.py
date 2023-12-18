@@ -29,7 +29,6 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     # evaluate
     predmodel.eval()
     dloss = 0 # regret
-    ploss = 0 # mse
     optsum = 0
     total_node_count = 0
     num_solves = 0
@@ -55,7 +54,6 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
                 regrets.append(regret)
                 # accumulate mse
                 mse = ((cp[j] - c[j]) ** 2).mean()
-                ploss += mse
                 mses.append(mse)
                 # accumulate node count
                 node_count = optmodel._model.getAttr(GRB.Attr.NodeCount)
@@ -63,20 +61,21 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
                 nodes.append(node_count)
                 # update solved number
                 num_solves += 1
+                # total objective value
+                optsum += abs(z[j]).item()
             except AttributeError as e:
                 if self.skip_infeas:
                     tbar.write("No feasible solution! Drop instance {}.".format(j))
                     continue  # skip this data point
                 else:
                     raise ValueError("No feasible solution!")  # raise the exception
-        optsum += abs(z).sum().item()
     # get tables for each instance
     instance_res = pd.DataFrame({"Regret": regrets, "MSE":mses, "Nodes": nodes})
     # turn back train mode
     predmodel.train()
     # normalized
     avg_regret = dloss / (optsum + 1e-7)
-    avg_mse = ploss / num_solves
+    avg_mse = instance_res["MSE"].mean()
     median_node = instance_res["Nodes"].median()
     return avg_regret, avg_mse, median_node, instance_res
 
