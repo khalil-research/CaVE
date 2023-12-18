@@ -64,7 +64,7 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
                 # total objective value
                 optsum += abs(z[j]).item()
             except AttributeError as e:
-                if self.skip_infeas:
+                if skip_infeas:
                     tbar.write("No feasible solution! Drop instance {}.".format(j))
                     continue  # skip this data point
                 else:
