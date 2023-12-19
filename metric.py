@@ -36,6 +36,7 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     regrets, mses, nodes = [], [], []
     # load data
     for data in tqdm(dataloader):
+        # unzip data
         try:
             x, c, w, z, ctr = data
         except:
