@@ -34,13 +34,13 @@ The project depends on the following packages. The listed versions are used for 
 
 * [NumPy](https://numpy.org/) [1.25.2]
 * [SciPy](https://scipy.org/) [1.11.2]
-* [Pathos](https://pathos.readthedocs.io/)  [0.3.1]
+* [Pathos](https://pathos.readthedocs.io/) [0.3.1]
 * [tqdm](https://tqdm.github.io/) [4.66.1]
 * [CVXPY](https://www.cvxpy.org/) [1.3.2]
 * [Clarabel](https://oxfordcontrol.github.io/ClarabelDocs) [0.6.0]
 * [Gurobi](https://www.gurobi.com/) [10.0.3]
 * [PyTorch](http://pytorch.org/) [2.0.1]
-* [PyEPO](https://github.com/khalil-research/PyEPO) [0.3.6]
+* [PyEPO](https://github.com/khalil-research/PyEPO) [0.3.5]
 
 ## Download
 
