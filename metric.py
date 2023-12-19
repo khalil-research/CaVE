@@ -36,7 +36,10 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     regrets, mses, nodes = [], [], []
     # load data
     for data in tqdm(dataloader):
-        x, c, w, z, ctr = data
+        try:
+            x, c, w, z, ctr = data
+        except:
+            x, c, w, z = data
         # to cuda if model in cuda
         if next(predmodel.parameters()).is_cuda:
             x = x.cuda()
