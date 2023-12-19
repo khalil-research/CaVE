@@ -84,10 +84,12 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         metrics, loss_log, instance_res = train(reg, optmodel, config.prob, config.mthd,
                                                 *dataloaders, hparams, config.rel)
         instance_res.to_csv(res_path[:-4]+"_{}.csv".format(i), index=False)
+        del instance_res # save memory
         # save loss
         if i == 0:
             # only first experiments
             saveLoss(loss_log, res_path, i)
+        del loss_log # save memory
         # show metrics
         print("Evaluation:")
         print(metrics)
