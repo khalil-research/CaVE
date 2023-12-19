@@ -60,7 +60,9 @@ if __name__ == "__main__":
         methods = ["2s", "cave", "cave+", "caveh", "spo+", "pfyl", "nce"]
 
     # more mem
-    if (setting.prob == "tsp50") or (setting.prob == "vrp20"):
+    if setting.prob == "tsp50":
+        mem_gb = 64
+    if setting.prob == "vrp20":
         mem_gb = 32
 
     # submit
