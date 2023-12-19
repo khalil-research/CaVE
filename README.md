@@ -40,7 +40,7 @@ The project depends on the following packages. The listed versions are used for 
 * [Clarabel](https://oxfordcontrol.github.io/ClarabelDocs) [0.6.0]
 * [Gurobi](https://www.gurobi.com/) [10.0.3]
 * [PyTorch](http://pytorch.org/) [2.0.1]
-* [PyEPO](https://github.com/khalil-research/PyEPO) [0.3.6]
+* [PyEPO](https://github.com/khalil-research/PyEPO) [0.3.5]
 
 ## Download
 
