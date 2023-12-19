@@ -147,7 +147,7 @@ for epoch in range(num_epochs):
 ## Running the Tests
 
 ```
-python run_test.py
+python run_tests.py
 ```
 
 ## License
