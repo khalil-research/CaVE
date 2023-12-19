@@ -46,8 +46,7 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparam
         loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
     elif mthd_name == "cave+":
         # init loss
-        cave = innerConeAlignedCosine(optmodel, solver=config.solver,
-                                      max_iter=config.max_iter)
+        cave = innerConeAlignedCosine(optmodel, solver=config.solver)
         # train
         loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
     elif mthd_name == "caveh":
@@ -128,7 +127,7 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, c, _, _, _ = data
+                x, c, _, _ = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -186,7 +185,7 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, c, w, z, _ = data
+                x, c, w, z = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -215,7 +214,7 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, _, w, _, _ = data
+                x, _, w, _ = data
                 # predict
                 cp = reg(x)
                 # loss
@@ -244,7 +243,7 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
             for data in dataloader:
-                x, _, w, _, _ = data
+                x, _, w, _ = data
                 # predict
                 cp = reg(x)
                 # loss

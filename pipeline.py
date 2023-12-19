@@ -76,7 +76,7 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         # generate data
         print("Generating synthetic data...")
         feats, costs = genData(config.prob, config.data, config.deg, seed)
-        dataloaders = genDataLoader(optmodel, feats, costs, seed)
+        dataloaders = genDataLoader(optmodel, feats, costs, config.mthd, seed)
         # init predictor
         reg = linearRegression(feats.shape[1], costs.shape[1])
         # train and eval
@@ -181,7 +181,7 @@ def genData(prob_name, num_data, poly_deg, seed):
     return feats, costs
 
 
-def genDataLoader(optmodel, feats, costs, seed):
+def genDataLoader(optmodel, feats, costs, mthd_name, seed):
     """
     A method to get data loaders with solving optimal solutions
     """
@@ -190,14 +190,22 @@ def genDataLoader(optmodel, feats, costs, seed):
                                                         test_size=1000,
                                                         random_state=135)
     # create dataset
-    dataset_train = optDatasetConstrs(optmodel, x_train, c_train)
-    dataset_test = optDatasetConstrs(optmodel, x_test, c_test)
+    if mthd_name[:4] == "cave":
+        # need constraints
+        dataset_train = optDatasetConstrs(optmodel, x_train, c_train)
+    else:
+        # no need constraints
+        dataset_train = pyepo.data.dataset.optDataset(optmodel, x_train, c_train)
+    dataset_test = pyepo.data.dataset.optDataset(optmodel, x_test, c_test)
     # get data loader
     batch_size = 32
-    loader_train = DataLoader(dataset_train, batch_size=batch_size,
-                              collate_fn=collate_fn, shuffle=True)
-    loader_test = DataLoader(dataset_test, batch_size=batch_size,
-                             collate_fn=collate_fn, shuffle=False)
+    if mthd_name[:4] == "cave":
+        # pad constraints
+        loader_train = DataLoader(dataset_train, batch_size=batch_size,
+                                  collate_fn=collate_fn, shuffle=True)
+    else:
+        loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
+    loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
     return loader_train, loader_test
 
 
