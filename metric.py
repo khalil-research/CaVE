@@ -28,7 +28,6 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     """
     # evaluate
     predmodel.eval()
-    dloss = 0 # regret
     optsum = 0
     total_node_count = 0
     num_solves = 0
@@ -54,7 +53,6 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
             try:
                 # accumulate regret
                 regret = calRegret(optmodel, cp[j], c[j], z[j].item())
-                dloss += regret
                 regrets.append(regret)
                 # accumulate mse
                 mse = ((cp[j] - c[j]) ** 2).mean()
@@ -78,7 +76,7 @@ def regret(predmodel, optmodel, dataloader, skip_infeas=False):
     # turn back train mode
     predmodel.train()
     # normalized
-    avg_regret = dloss / (optsum + 1e-7)
+    avg_regret = instance_res["Regret"].sum() / (optsum + 1e-7)
     avg_mse = instance_res["MSE"].mean()
     median_node = instance_res["Nodes"].median()
     return avg_regret, avg_mse, median_node, instance_res
