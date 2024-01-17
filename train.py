@@ -27,11 +27,11 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
     if prob_name[:3] == "tsp" and relaxed:
         print("Using relaxation of TSP-MTZ for training...")
         optmodel_rel = tspMTZModel(optmodel.num_nodes).relax()
-    if prob_name[:3] == "vrp" and relaxed:
+    elif prob_name[:3] == "vrp" and relaxed:
         print("Using relaxation of vrp for training...")
         optmodel_rel = vrpModel2(optmodel.num_nodes, optmodel.demands,
                                  optmodel.capacity, optmodel.num_vehicle).relax()
-    else:
+    elif relaxed:
         raise Exception("Relaxed model does not exist")
     # get training config
     config = hparams[prob_name][mthd_name]
