@@ -173,7 +173,7 @@ def genData(prob_name, num_data, poly_deg, seed):
                                               seed=seed)
     # VRP20
     if prob_name == "vrp20":
-        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+10,
                                               num_features=10,
                                               num_nodes=21,
                                               deg=poly_deg,
@@ -188,7 +188,7 @@ def genDataLoader(optmodel, feats, costs, mthd_name, seed):
     """
     # data split
     x_train, x_test, c_train, c_test = train_test_split(feats, costs,
-                                                        test_size=1000,
+                                                        test_size=10,
                                                         random_state=135)
     # create dataset
     if mthd_name[:4] == "cave":

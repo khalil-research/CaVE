@@ -16,6 +16,7 @@ from gurobipy import GRB
 from src.cave import exactConeAlignedCosine, innerConeAlignedCosine
 from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
 from pyepo.model.grb import tspMTZModel
+from src.model import vrpModel2
 import metric
 
 def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
@@ -23,11 +24,15 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
     """
     A method to train and evaluate a neural net
     """
-    if prob_name[:3] != "tsp" and relaxed:
-        raise Exception("Relaxed model does not exist")
-    elif prob_name[:3] == "tsp" and relaxed:
+    if prob_name[:3] == "tsp" and relaxed:
         print("Using relaxation of TSP-MTZ for training...")
         optmodel_rel = tspMTZModel(optmodel.num_nodes).relax()
+    if prob_name[:3] == "vrp" and relaxed:
+        print("Using relaxation of vrp for training...")
+        optmodel_rel = vrpModel2(optmodel.num_nodes, optmodel.demands,
+                                 optmodel.capacity, optmodel.num_vehicle).relax()
+    else:
+        raise Exception("Relaxed model does not exist")
     # get training config
     config = hparams[prob_name][mthd_name]
     # set timelimit
