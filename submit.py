@@ -32,6 +32,9 @@ if __name__ == "__main__":
     parser.add_argument("--rel",
                         action="store_true",
                         help="train with relaxation model")
+    parser.add_argument("--rlog",
+                        action="store_true",
+                        help="record regret over time")
 
     # data configuration
     parser.add_argument("--data",

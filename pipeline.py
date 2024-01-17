@@ -81,14 +81,15 @@ def pipeline(config, hparams=hparams, res_dir="./res"):
         reg = linearRegression(feats.shape[1], costs.shape[1])
         # train and eval
         print("Training...")
-        metrics, loss_log, instance_res = train(reg, optmodel, config.prob, config.mthd,
-                                                *dataloaders, hparams, config.rel)
+        metrics, loss_log, regret_log, instance_res = train(reg, optmodel, config.prob,
+                                                            config.mthd, *dataloaders,
+                                                            hparams, config.rel, config.rlog)
         instance_res.to_csv(res_path[:-4]+"_{}.csv".format(i), index=False)
         del instance_res # save memory
         # save loss
         if i == 0:
             # only first experiments
-            saveLoss(loss_log, res_path, i)
+            saveLoss(loss_log, regret_log, res_path, i)
         del loss_log # save memory
         # show metrics
         print("Evaluation:")
@@ -209,13 +210,17 @@ def genDataLoader(optmodel, feats, costs, mthd_name, seed):
     return loader_train, loader_test
 
 
-def saveLoss(loss_log, res_path, exp_ind):
+def saveLoss(loss_log, regret_log, res_path, exp_ind):
     """
     A method to save loss as csv
     """
     save_path = res_path[:-4] + "_loss_{}.csv".format(exp_ind)
     np.savetxt(save_path, np.array(loss_log), delimiter=",")
     print("Save loss to", save_path)
+    if regret_log:
+        save_path = res_path[:-4] + "_regret_{}.csv".format(exp_ind)
+        np.savetxt(save_path, np.array(regret_log), delimiter=",")
+        print("Save regret to", save_path)
 
 
 if __name__ == "__main__":
@@ -235,6 +240,9 @@ if __name__ == "__main__":
     parser.add_argument("--rel",
                         action="store_true",
                         help="train with relaxation model")
+    parser.add_argument("--rlog",
+                        action="store_true",
+                        help="record regret over time")
 
     # data configuration
     parser.add_argument("--data",

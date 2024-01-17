@@ -18,7 +18,8 @@ from pyepo.func import SPOPlus, perturbedFenchelYoung, NCE
 from pyepo.model.grb import tspMTZModel
 import metric
 
-def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparams, relaxed):
+def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
+          hparams, relaxed, rlog):
     """
     A method to train and evaluate a neural net
     """
@@ -38,24 +39,28 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparam
         # init loss
         mse = nn.MSELoss()
         # train
-        loss_log = train2S(reg, loader_train, mse, config.lr, config.epochs)
+        loss_log, regret_log = train2S(optmodel, reg, loader_train, loader_test,
+                                       mse, config.lr, config.epochs, rlog)
     elif mthd_name == "cave":
         # init loss
         cave = exactConeAlignedCosine(optmodel, solver=config.solver)
         # train
-        loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
+        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_test,
+                                         cave, config.lr, config.epochs, rlog)
     elif mthd_name == "cave+":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver)
         # train
-        loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
+        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_test,
+                                         cave, config.lr, config.epochs, rlog)
     elif mthd_name == "caveh":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver,
                                       solve_ratio=config.solve_ratio,
                                       inner_ratio=config.inner_ratio)
         # train
-        loss_log = trainCaVE(reg, loader_train, cave, config.lr, config.epochs)
+        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_test,
+                                         cave, config.lr, config.epochs, rlog)
     elif mthd_name == "spo+":
         # init loss
         if relaxed:
@@ -63,7 +68,8 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparam
         else:
             spop = SPOPlus(optmodel)
         # train
-        loss_log = trainSPO(reg, loader_train, spop, config.lr, config.epochs)
+        loss_log, regret_log = trainSPO(optmodel, reg, loader_train, loader_test,
+                                        spop, config.lr, config.epochs, rlog)
     elif mthd_name == "pfyl":
         # init loss
         if relaxed:
@@ -73,12 +79,14 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparam
             pfy = perturbedFenchelYoung(optmodel, n_samples=config.n_samples,
                                         sigma=config.sigma)
         # train
-        loss_log = trainPFYL(reg, loader_train, pfy, config.lr, config.epochs)
+        loss_log, regret_log = trainPFYL(optmodel, reg, loader_train, loader_test,
+                                         pfy, config.lr, config.epochs, rlog)
     elif mthd_name == "nce":
         nce = NCE(optmodel, solve_ratio=config.solve_ratio,
                   dataset=loader_train.dataset)
         # train
-        loss_log = trainNCE(reg, loader_train, nce, config.lr, config.epochs)
+        loss_log, regret_log = trainNCE(optmodel, reg, loader_train, loader_test,
+                                        nce, config.lr, config.epochs, rlog)
     else:
         message = "This algorithm {} is not yet implemented".format(mthd_name)
         raise NotImplementedError(message)
@@ -111,10 +119,11 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test, hparam
     metrics["Test Nodes Count"] = nodes_test
     # to DataFrame
     metrics = pd.DataFrame([metrics])
-    return metrics, loss_log, instance_res
+    return metrics, loss_log, regret_log, instance_res
 
 
-def train2S(reg, dataloader, loss_func, lr, num_epochs):
+def train2S(optmodel, reg, dataloader, dataloader_test, loss_func,
+            lr, num_epochs, rlog=False):
     """
     A method for 2-stage training
     """
@@ -122,7 +131,7 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log = []
+    loss_log, regret_log = [], []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -140,10 +149,14 @@ def train2S(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
-    return loss_log
+            if rlog:
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret_log.append(regret)
+    return loss_log, regret_log
 
 
-def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
+def trainCaVE(optmodel, reg, dataloader, dataloader_test, loss_func,
+              lr, num_epochs, rlog=False):
     """
     A method for CaVE training
     """
@@ -151,7 +164,7 @@ def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log = []
+    loss_log, regret_log = [], []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -169,10 +182,14 @@ def trainCaVE(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
-    return loss_log
+            if rlog:
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret_log.append(regret)
+    return loss_log, regret_log
 
 
-def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
+def trainSPO(optmodel, reg, dataloader, dataloader_test, loss_func,
+             lr, num_epochs, rlog=False):
     """
     A method for SPO+ training
     """
@@ -180,7 +197,7 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log = []
+    loss_log, regret_log = [], []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -198,10 +215,14 @@ def trainSPO(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
-    return loss_log
+            if rlog:
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret_log.append(regret)
+    return loss_log, regret_log
 
 
-def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
+def trainPFYL(optmodel, reg, dataloader, dataloader_test, loss_func,
+              lr, num_epochs, rlog=False):
     """
     A method for PFYL training
     """
@@ -209,7 +230,7 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log = []
+    loss_log, regret_log = [], []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -227,10 +248,14 @@ def trainPFYL(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
-    return loss_log
+            if rlog:
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret_log.append(regret)
+    return loss_log, regret_log
 
 
-def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
+def trainNCE(optmodel, reg, dataloader, dataloader_test, loss_func,
+             lr, num_epochs, rlog=False):
     """
     A method for NCE training
     """
@@ -238,7 +263,7 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log = []
+    loss_log, regret_log = [], []
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -256,4 +281,7 @@ def trainNCE(reg, dataloader, loss_func, lr, num_epochs):
                 tbar.set_description("Epoch {:4.0f}, Loss: {:8.4f}".
                                      format(epoch, loss.item()))
                 tbar.update(1)
-    return loss_log
+            if rlog:
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret_log.append(regret)
+    return loss_log, regret_log
