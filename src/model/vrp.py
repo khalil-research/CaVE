@@ -236,6 +236,77 @@ class vrpModel2(vrpABModel):
         capacity (int): Vehicle capacity
         num_vehicle (int): Number of vehicle
     """
+    def _getModel(self):
+        """
+        A method to build Gurobi model
+
+        Returns:
+            tuple: optimization model and variables
+        """
+        # ceate a model
+        m = gp.Model("vrp")
+        # turn off output
+        m.Params.outputFlag = 0
+        # varibles
+        directed_edges = self.edges + [(j, i) for (i, j) in self.edges]
+        x = m.addVars(directed_edges, name="x", vtype=GRB.BINARY)
+        u = m.addVars(self.nodes, name="u", lb=[0]+list(self.demands), ub=self.capacity,
+                      vtype=GRB.CONTINUOUS)
+        # sense
+        m.modelSense = GRB.MINIMIZE
+        # constraints
+        m.addConstrs(gp.quicksum(x[i, j] for j in self.nodes if j != i) == 1
+                     for i in self.nodes if i != 0) # 2 degree
+        m.addConstrs(gp.quicksum(x[i, j] for i in self.nodes if i != j) == 1
+                     for j in self.nodes if j != 0)  # 2 degree
+        m.addConstr(x.sum(0, "*") <= self.num_vehicle) # depot degree
+        m.addConstr(x.sum("*", 0) <= self.num_vehicle) # depot degree
+        m.addConstrs(u[i] - u[j] + self.capacity * x[i, j] <= self.capacity - self.demands[j-1]
+                     for i, j in directed_edges if i != 0 and j != 0) # capacity
+        return m, x
+
+    def setObj(self, c):
+        """
+        A method to set objective function
+
+        Args:
+            c (list): cost vector
+        """
+        obj = gp.quicksum(c[k] * (self.x[i,j] + self.x[j,i])
+                          for k, (i,j) in enumerate(self.edges))
+        self._model.setObjective(obj)
+
+    def solve(self):
+        """
+        A method to solve model
+        """
+        self._model.update()
+        self._model.optimize()
+        sol = np.zeros(self.num_cost, dtype=np.uint8)
+        for k, (i,j) in enumerate(self.edges):
+            if self.x[i,j].x > 1e-2 or self.x[j,i].x > 1e-2:
+                sol[k] = 1
+        return sol, self._model.objVal
+
+    def relax(self):
+        """
+        A method to get linear relaxation model
+        """
+        # copy
+        model_rel = vrpModel2Rel(self.num_nodes, self.demands,
+                                 self.capacity, self.num_vehicle)
+        return model_rel
+
+
+class vrpModel2Rel(vrpModel2):
+    """
+    This class is relaxation of vrpModel2.
+
+    Attributes:
+        _model (GurobiPy model): Gurobi model
+        num_nodes (int): Number of nodes
+        edges (list): List of edge index
+    """
 
     def _getModel(self):
         """
@@ -249,15 +320,45 @@ class vrpModel2(vrpABModel):
         # turn off output
         m.Params.outputFlag = 0
         # varibles
-        x = m.addVars(self.edges, name="x", vtype=GRB.BINARY)
-        for i, j in self.edges:
-            x[j, i] = x[i, j]
-        u = m.addVars(self.nodes, ub=sefl.capacity, vtype=GRB.CONTINUOUS)
+        directed_edges = self.edges + [(j, i) for (i, j) in self.edges]
+        x = m.addVars(directed_edges, name="x", vtype=GRB.CONTINUOUS)
+        u = m.addVars(self.nodes, name="u", lb=[0]+list(self.demands), ub=self.capacity,
+                      vtype=GRB.CONTINUOUS)
         # sense
         m.modelSense = GRB.MINIMIZE
         # constraints
-        m.addConstr(x.sum(0, "*") <= 2 * self.num_vehicle) # depot degree
-        m.addConstrs(x.sum(i, "*") == 2 for i in self.nodes if i != 0)  # 2 degree
-        m.addConstrs((u[i] - u[j] + self.capacity * x[i, j] <= self.capacity - demands[j-1])
-                     for i, j in self.edges if i != 0 and j != 0) # capacity
-        m.addConstrs(demands[i-1] <= self.u[i] for i in self.nodes if i != 0)
+        m.addConstrs(gp.quicksum(x[i, j] for j in self.nodes if j != i) == 1
+                     for i in self.nodes if i != 0) # 2 degree
+        m.addConstrs(gp.quicksum(x[i, j] for i in self.nodes if i != j) == 1
+                     for j in self.nodes if j != 0)  # 2 degree
+        m.addConstr(x.sum(0, "*") <= self.num_vehicle) # depot degree
+        m.addConstr(x.sum("*", 0) <= self.num_vehicle) # depot degree
+        m.addConstrs(u[i] - u[j] + self.capacity * x[i, j] <= self.capacity - self.demands[j-1]
+                     for i, j in directed_edges if i != 0 and j != 0) # capacity
+        return m, x
+
+    def solve(self):
+        """
+        A method to solve model
+
+        Returns:
+            tuple: optimal solution (list) and objective value (float)
+        """
+        self._model.update()
+        self._model.optimize()
+        sol = np.zeros(len(self.edges))
+        for k, (i,j) in enumerate(self.edges):
+            sol[k] = self.x[i,j].x + self.x[j,i].x
+        return sol, self._model.objVal
+
+    def relax(self):
+        """
+        A forbidden method to relax MIP model
+        """
+        raise RuntimeError("Model has already been relaxed.")
+
+    def getTour(self, sol):
+        """
+        A forbidden method to get a tour from solution
+        """
+        raise RuntimeError("Relaxation Model has no integer solution.")
