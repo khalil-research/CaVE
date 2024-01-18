@@ -18,9 +18,9 @@ from pyepo.model.grb.grbmodel import optGrbModel
 # the case where only one node is accessed is not taken into account. However,
 # this problem can be handeled by adding a dummy of depot.
 
-class vrpModel(optGrbModel):
+class vrpABModel(optGrbModel):
     """
-    This class is optimization model for capacitated vehicle routing probelm
+    This abstract class is optimization model for capacitated vehicle routing probelm
 
     Attributes:
         _model (GurobiPy model): Gurobi model
@@ -48,65 +48,6 @@ class vrpModel(optGrbModel):
         self.num_vehicle = num_vehicle
         super().__init__()
 
-    def _getModel(self):
-        """
-        A method to build Gurobi model
-
-        Returns:
-            tuple: optimization model and variables
-        """
-        # ceate a model
-        m = gp.Model("vrp")
-        # turn off output
-        m.Params.outputFlag = 0
-        # varibles
-        x = m.addVars(self.edges, name="x", vtype=GRB.BINARY)
-        for i, j in self.edges:
-            x[j, i] = x[i, j]
-        # sense
-        m.modelSense = GRB.MINIMIZE
-        # constraints
-        m.addConstr(x.sum(0, "*") <= 2 * self.num_vehicle) # depot degree
-        m.addConstrs(x.sum(i, "*") == 2 for i in self.nodes if i != 0)  # 2 degree
-        # activate lazy constraints
-        m._x = x
-        m._q = {i: self.demands[i-1] for i in self.nodes[1:]}
-        m._Q = self.capacity
-        m._edges = self.edges
-        m.Params.lazyConstraints = 1
-        return m, x
-
-    def _vrpCallback(self, model, where):
-        """
-        A method to add k-path lazy constraints for CVRP
-        """
-        if where == GRB.Callback.MIPSOL:
-            # check subcycle with unionfind
-            uf = unionFind(self.num_nodes)
-            for u, v in model._edges:
-                if u == 0 or v == 0:
-                    continue
-                if model.cbGetSolution(model._x[u, v]) > 1e-2:
-                    uf.union(u, v)
-            # go through subcycles
-            for component in uf.getComponents():
-                if len(component) < 3:
-                    continue
-                # rounded capacity inequalities
-                k = int(np.ceil(np.sum([model._q[v] for v in component]) / model._Q))
-                # edges with both end-vertex in S
-                edges_s = [(u, v) for u in component for v in component if u < v]
-                # add k-path cut
-                if len(component) >= 3:
-                    if (len(edges_s) >= len(component)) or (k > 1):
-                        # constraint expression
-                        constr = gp.quicksum(model._x[e]
-                                             for e in edges_s) <= len(component) - k
-                        # add lazy constraints
-                        model.cbLazy(constr)
-                        # store lazy constraints to find all binding constraints
-                        self.lazy_constrs.append(constr)
-
     def setObj(self, c):
         """
         A method to set objective function
@@ -121,13 +62,8 @@ class vrpModel(optGrbModel):
         """
         A method to solve model
         """
-        # init lazy constraints
-        self.lazy_constrs = []
-        # create a callback function with access to method variables
-        def vrpCallback(model, where):
-            self._vrpCallback(model, where)
         # solve
-        self._model.optimize(vrpCallback)
+        self._model.optimize()
         sol = np.zeros(len(self.edges), dtype=np.uint8)
         for i, e in enumerate(self.edges):
             if self.x[e].x > 1e-2:
@@ -196,3 +132,233 @@ class vrpModel(optGrbModel):
                     # ignore non-param
                     pass
         return new_model
+
+
+class vrpModel(vrpABModel):
+    """
+    This class is optimization model for capacitated vehicle routing probelm
+
+    Attributes:
+        _model (GurobiPy model): Gurobi model
+        num_nodes (int): Number of nodes
+        edges (list): List of edge index
+        demands (list(int)): List of customer demands
+        capacity (int): Vehicle capacity
+        num_vehicle (int): Number of vehicle
+    """
+
+    def _getModel(self):
+        """
+        A method to build Gurobi model
+
+        Returns:
+            tuple: optimization model and variables
+        """
+        # ceate a model
+        m = gp.Model("vrp")
+        # turn off output
+        m.Params.outputFlag = 0
+        # varibles
+        x = m.addVars(self.edges, name="x", vtype=GRB.BINARY)
+        for i, j in self.edges:
+            x[j, i] = x[i, j]
+        # sense
+        m.modelSense = GRB.MINIMIZE
+        # constraints
+        m.addConstr(x.sum(0, "*") <= 2 * self.num_vehicle) # depot degree
+        m.addConstrs(x.sum(i, "*") == 2 for i in self.nodes if i != 0)  # 2 degree
+        # activate lazy constraints
+        m._x = x
+        m._q = {i: self.demands[i-1] for i in self.nodes[1:]}
+        m._Q = self.capacity
+        m._edges = self.edges
+        m.Params.lazyConstraints = 1
+        return m, x
+
+    def _vrpCallback(self, model, where):
+        """
+        A method to add k-path lazy constraints for CVRP
+        """
+        if where == GRB.Callback.MIPSOL:
+            # check subcycle with unionfind
+            uf = unionFind(self.num_nodes)
+            for u, v in model._edges:
+                if u == 0 or v == 0:
+                    continue
+                if model.cbGetSolution(model._x[u, v]) > 1e-2:
+                    uf.union(u, v)
+            # go through subcycles
+            for component in uf.getComponents():
+                if len(component) < 3:
+                    continue
+                # rounded capacity inequalities
+                k = int(np.ceil(np.sum([model._q[v] for v in component]) / model._Q))
+                # edges with both end-vertex in S
+                edges_s = [(u, v) for u in component for v in component if u < v]
+                # add k-path cut
+                if len(component) >= 3:
+                    if (len(edges_s) >= len(component)) or (k > 1):
+                        # constraint expression
+                        constr = gp.quicksum(model._x[e]
+                                             for e in edges_s) <= len(component) - k
+                        # add lazy constraints
+                        model.cbLazy(constr)
+                        # store lazy constraints to find all binding constraints
+                        self.lazy_constrs.append(constr)
+
+    def solve(self):
+        """
+        A method to solve model
+        """
+        # init lazy constraints
+        self.lazy_constrs = []
+        # create a callback function with access to method variables
+        def vrpCallback(model, where):
+            self._vrpCallback(model, where)
+        # solve
+        self._model.optimize(vrpCallback)
+        sol = np.zeros(len(self.edges), dtype=np.uint8)
+        for i, e in enumerate(self.edges):
+            if self.x[e].x > 1e-2:
+                sol[i] = int(np.round(self.x[e].x))
+        return sol, self._model.objVal
+
+
+class vrpModel2(vrpABModel):
+    """
+    This class is optimization model for capacitated vehicle routing probelm
+
+    Attributes:
+        _model (GurobiPy model): Gurobi model
+        num_nodes (int): Number of nodes
+        edges (list): List of edge index
+        demands (list(int)): List of customer demands
+        capacity (int): Vehicle capacity
+        num_vehicle (int): Number of vehicle
+    """
+    def _getModel(self):
+        """
+        A method to build Gurobi model
+
+        Returns:
+            tuple: optimization model and variables
+        """
+        # ceate a model
+        m = gp.Model("vrp")
+        # turn off output
+        m.Params.outputFlag = 0
+        # varibles
+        directed_edges = self.edges + [(j, i) for (i, j) in self.edges]
+        x = m.addVars(directed_edges, name="x", vtype=GRB.BINARY)
+        u = m.addVars(self.nodes, name="u", lb=[0]+list(self.demands), ub=self.capacity,
+                      vtype=GRB.CONTINUOUS)
+        # sense
+        m.modelSense = GRB.MINIMIZE
+        # constraints
+        m.addConstrs(gp.quicksum(x[i, j] for j in self.nodes if j != i) == 1
+                     for i in self.nodes if i != 0) # 2 degree
+        m.addConstrs(gp.quicksum(x[i, j] for i in self.nodes if i != j) == 1
+                     for j in self.nodes if j != 0)  # 2 degree
+        m.addConstr(x.sum(0, "*") <= self.num_vehicle) # depot degree
+        m.addConstr(x.sum("*", 0) <= self.num_vehicle) # depot degree
+        m.addConstrs(u[i] - u[j] + self.capacity * x[i, j] <= self.capacity - self.demands[j-1]
+                     for i, j in directed_edges if i != 0 and j != 0) # capacity
+        return m, x
+
+    def setObj(self, c):
+        """
+        A method to set objective function
+
+        Args:
+            c (list): cost vector
+        """
+        obj = gp.quicksum(c[k] * (self.x[i,j] + self.x[j,i])
+                          for k, (i,j) in enumerate(self.edges))
+        self._model.setObjective(obj)
+
+    def solve(self):
+        """
+        A method to solve model
+        """
+        self._model.update()
+        self._model.optimize()
+        sol = np.zeros(self.num_cost, dtype=np.uint8)
+        for k, (i,j) in enumerate(self.edges):
+            if self.x[i,j].x > 1e-2 or self.x[j,i].x > 1e-2:
+                sol[k] = 1
+        return sol, self._model.objVal
+
+    def relax(self):
+        """
+        A method to get linear relaxation model
+        """
+        # copy
+        model_rel = vrpModel2Rel(self.num_nodes, self.demands,
+                                 self.capacity, self.num_vehicle)
+        return model_rel
+
+
+class vrpModel2Rel(vrpModel2):
+    """
+    This class is relaxation of vrpModel2.
+
+    Attributes:
+        _model (GurobiPy model): Gurobi model
+        num_nodes (int): Number of nodes
+        edges (list): List of edge index
+    """
+
+    def _getModel(self):
+        """
+        A method to build Gurobi model
+
+        Returns:
+            tuple: optimization model and variables
+        """
+        # ceate a model
+        m = gp.Model("vrp")
+        # turn off output
+        m.Params.outputFlag = 0
+        # varibles
+        directed_edges = self.edges + [(j, i) for (i, j) in self.edges]
+        x = m.addVars(directed_edges, name="x", vtype=GRB.CONTINUOUS)
+        u = m.addVars(self.nodes, name="u", lb=[0]+list(self.demands), ub=self.capacity,
+                      vtype=GRB.CONTINUOUS)
+        # sense
+        m.modelSense = GRB.MINIMIZE
+        # constraints
+        m.addConstrs(gp.quicksum(x[i, j] for j in self.nodes if j != i) == 1
+                     for i in self.nodes if i != 0) # 2 degree
+        m.addConstrs(gp.quicksum(x[i, j] for i in self.nodes if i != j) == 1
+                     for j in self.nodes if j != 0)  # 2 degree
+        m.addConstr(x.sum(0, "*") <= self.num_vehicle) # depot degree
+        m.addConstr(x.sum("*", 0) <= self.num_vehicle) # depot degree
+        m.addConstrs(u[i] - u[j] + self.capacity * x[i, j] <= self.capacity - self.demands[j-1]
+                     for i, j in directed_edges if i != 0 and j != 0) # capacity
+        return m, x
+
+    def solve(self):
+        """
+        A method to solve model
+
+        Returns:
+            tuple: optimal solution (list) and objective value (float)
+        """
+        self._model.update()
+        self._model.optimize()
+        sol = np.zeros(len(self.edges))
+        for k, (i,j) in enumerate(self.edges):
+            sol[k] = self.x[i,j].x + self.x[j,i].x
+        return sol, self._model.objVal
+
+    def relax(self):
+        """
+        A forbidden method to relax MIP model
+        """
+        raise RuntimeError("Model has already been relaxed.")
+
+    def getTour(self, sol):
+        """
+        A forbidden method to get a tour from solution
+        """
+        raise RuntimeError("Relaxation Model has no integer solution.")
