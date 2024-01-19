@@ -149,7 +149,7 @@ def genData(prob_name, num_data, poly_deg, seed):
     """
     # SP5
     if prob_name == "sp5":
-        feats, costs = pyepo.data.shortestpath.genData(num_data=num_data+1000,
+        feats, costs = pyepo.data.shortestpath.genData(num_data=num_data+1100,
                                                        num_features=5,
                                                        grid=(5,5),
                                                        deg=poly_deg,
@@ -157,7 +157,7 @@ def genData(prob_name, num_data, poly_deg, seed):
                                                        seed=seed)
     # TSP20
     if prob_name == "tsp20":
-        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1100,
                                               num_features=10,
                                               num_nodes=20,
                                               deg=poly_deg,
@@ -165,7 +165,7 @@ def genData(prob_name, num_data, poly_deg, seed):
                                               seed=seed)
     # TSP50
     if prob_name == "tsp50":
-        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1100,
                                               num_features=10,
                                               num_nodes=50,
                                               deg=poly_deg,
@@ -173,7 +173,7 @@ def genData(prob_name, num_data, poly_deg, seed):
                                               seed=seed)
     # VRP20
     if prob_name == "vrp20":
-        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1000,
+        feats, costs = pyepo.data.tsp.genData(num_data=num_data+1100,
                                               num_features=10,
                                               num_nodes=21,
                                               deg=poly_deg,
@@ -190,6 +190,9 @@ def genDataLoader(optmodel, feats, costs, mthd_name, seed):
     x_train, x_test, c_train, c_test = train_test_split(feats, costs,
                                                         test_size=1000,
                                                         random_state=135)
+    x_train, x_val, c_train, c_val = train_test_split(x_train, c_train,
+                                                      test_size=100,
+                                                      random_state=135)
     # create dataset
     if mthd_name[:4] == "cave":
         # need constraints
@@ -197,6 +200,7 @@ def genDataLoader(optmodel, feats, costs, mthd_name, seed):
     else:
         # no need constraints
         dataset_train = pyepo.data.dataset.optDataset(optmodel, x_train, c_train)
+    dataset_val = pyepo.data.dataset.optDataset(optmodel, x_val, c_val)
     dataset_test = pyepo.data.dataset.optDataset(optmodel, x_test, c_test)
     # get data loader
     batch_size = 32
@@ -206,8 +210,9 @@ def genDataLoader(optmodel, feats, costs, mthd_name, seed):
                                   collate_fn=collate_fn, shuffle=True)
     else:
         loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
+    loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False)
     loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
-    return loader_train, loader_test
+    return loader_train, loader_val, loader_test
 
 
 def saveLoss(loss_log, regret_log, res_path, exp_ind):

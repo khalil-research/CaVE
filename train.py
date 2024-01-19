@@ -19,7 +19,7 @@ from pyepo.model.grb import tspMTZModel
 from src.model import vrpModel2
 import metric
 
-def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
+def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_val, loader_test,
           hparams, relaxed, rlog):
     """
     A method to train and evaluate a neural net
@@ -44,19 +44,19 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
         # init loss
         mse = nn.MSELoss()
         # train
-        loss_log, regret_log = train2S(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = train2S(optmodel, reg, loader_train, loader_val,
                                        mse, config.lr, config.epochs, rlog)
     elif mthd_name == "cave":
         # init loss
         cave = exactConeAlignedCosine(optmodel, solver=config.solver)
         # train
-        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_val,
                                          cave, config.lr, config.epochs, rlog)
     elif mthd_name == "cave+":
         # init loss
         cave = innerConeAlignedCosine(optmodel, solver=config.solver)
         # train
-        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_val,
                                          cave, config.lr, config.epochs, rlog)
     elif mthd_name == "caveh":
         # init loss
@@ -64,7 +64,7 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
                                       solve_ratio=config.solve_ratio,
                                       inner_ratio=config.inner_ratio)
         # train
-        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = trainCaVE(optmodel, reg, loader_train, loader_val,
                                          cave, config.lr, config.epochs, rlog)
     elif mthd_name == "spo+":
         # init loss
@@ -73,7 +73,7 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
         else:
             spop = SPOPlus(optmodel)
         # train
-        loss_log, regret_log = trainSPO(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = trainSPO(optmodel, reg, loader_train, loader_val,
                                         spop, config.lr, config.epochs, rlog)
     elif mthd_name == "pfyl":
         # init loss
@@ -84,13 +84,13 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
             pfy = perturbedFenchelYoung(optmodel, n_samples=config.n_samples,
                                         sigma=config.sigma)
         # train
-        loss_log, regret_log = trainPFYL(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = trainPFYL(optmodel, reg, loader_train, loader_val,
                                          pfy, config.lr, config.epochs, rlog)
     elif mthd_name == "nce":
         nce = NCE(optmodel, solve_ratio=config.solve_ratio,
                   dataset=loader_train.dataset)
         # train
-        loss_log, regret_log = trainNCE(optmodel, reg, loader_train, loader_test,
+        loss_log, regret_log = trainNCE(optmodel, reg, loader_train, loader_val,
                                         nce, config.lr, config.epochs, rlog)
     else:
         message = "This algorithm {} is not yet implemented".format(mthd_name)
@@ -127,7 +127,7 @@ def train(reg, optmodel, prob_name, mthd_name, loader_train, loader_test,
     return metrics, loss_log, regret_log, instance_res
 
 
-def train2S(optmodel, reg, dataloader, dataloader_test, loss_func,
+def train2S(optmodel, reg, dataloader, dataloader_val, loss_func,
             lr, num_epochs, rlog=False):
     """
     A method for 2-stage training
@@ -155,12 +155,12 @@ def train2S(optmodel, reg, dataloader, dataloader_test, loss_func,
                                      format(epoch, loss.item()))
                 tbar.update(1)
             if rlog:
-                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
                 regret_log.append(regret)
     return loss_log, regret_log
 
 
-def trainCaVE(optmodel, reg, dataloader, dataloader_test, loss_func,
+def trainCaVE(optmodel, reg, dataloader, dataloader_val, loss_func,
               lr, num_epochs, rlog=False):
     """
     A method for CaVE training
@@ -188,12 +188,12 @@ def trainCaVE(optmodel, reg, dataloader, dataloader_test, loss_func,
                                      format(epoch, loss.item()))
                 tbar.update(1)
             if rlog:
-                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
                 regret_log.append(regret)
     return loss_log, regret_log
 
 
-def trainSPO(optmodel, reg, dataloader, dataloader_test, loss_func,
+def trainSPO(optmodel, reg, dataloader, dataloader_val, loss_func,
              lr, num_epochs, rlog=False):
     """
     A method for SPO+ training
@@ -221,12 +221,12 @@ def trainSPO(optmodel, reg, dataloader, dataloader_test, loss_func,
                                      format(epoch, loss.item()))
                 tbar.update(1)
             if rlog:
-                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
                 regret_log.append(regret)
     return loss_log, regret_log
 
 
-def trainPFYL(optmodel, reg, dataloader, dataloader_test, loss_func,
+def trainPFYL(optmodel, reg, dataloader, dataloader_val, loss_func,
               lr, num_epochs, rlog=False):
     """
     A method for PFYL training
@@ -254,12 +254,12 @@ def trainPFYL(optmodel, reg, dataloader, dataloader_test, loss_func,
                                      format(epoch, loss.item()))
                 tbar.update(1)
             if rlog:
-                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
                 regret_log.append(regret)
     return loss_log, regret_log
 
 
-def trainNCE(optmodel, reg, dataloader, dataloader_test, loss_func,
+def trainNCE(optmodel, reg, dataloader, dataloader_val, loss_func,
              lr, num_epochs, rlog=False):
     """
     A method for NCE training
@@ -287,6 +287,6 @@ def trainNCE(optmodel, reg, dataloader, dataloader_test, loss_func,
                                      format(epoch, loss.item()))
                 tbar.update(1)
             if rlog:
-                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_test)
+                regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
                 regret_log.append(regret)
     return loss_log, regret_log
