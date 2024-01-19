@@ -136,7 +136,10 @@ def train2S(optmodel, reg, dataloader, dataloader_val, loss_func,
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log, regret_log = [], []
+    loss_log = []
+    if rlog:
+        regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
+        regret_log = [regret]
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -169,7 +172,10 @@ def trainCaVE(optmodel, reg, dataloader, dataloader_val, loss_func,
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log, regret_log = [], []
+    loss_log = []
+    if rlog:
+        regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
+        regret_log = [regret]
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -202,7 +208,10 @@ def trainSPO(optmodel, reg, dataloader, dataloader_val, loss_func,
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log, regret_log = [], []
+    loss_log = []
+    if rlog:
+        regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
+        regret_log = [regret]
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -235,7 +244,10 @@ def trainPFYL(optmodel, reg, dataloader, dataloader_val, loss_func,
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log, regret_log = [], []
+    loss_log = []
+    if rlog:
+        regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
+        regret_log = [regret]
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
@@ -268,7 +280,10 @@ def trainNCE(optmodel, reg, dataloader, dataloader_val, loss_func,
     # set optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # init log
-    loss_log, regret_log = [], []
+    loss_log = []
+    if rlog:
+        regret, _, _, _ = metric.regret(reg, optmodel, dataloader_val)
+        regret_log = [regret]
     # train
     with tqdm(total=num_epochs*len(dataloader)) as tbar:
         for epoch in range(num_epochs):
