@@ -1,0 +1,10 @@
+,Method,Avg Optimality Rate
+0,2s,0.0
+1,cave,0.00030000000000000003
+2,cave+,0.00030000000000000003
+3,caveh,0.0
+4,spo+,0.0
+5,spo+_rel,0.0
+6,pfyl,0.0004
+7,pfyl_rel,0.0001
+8,nce,0.0
