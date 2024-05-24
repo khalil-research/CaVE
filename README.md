@@ -17,15 +17,18 @@ Citation:
 }
 ```
 
+## Talk Slides
+
+There is a talk on our paper at the CPAIOR 2024 conference. You can view the slides of the talk [here](https://github.com/khalil-research/CaVE/blob/main/slides/CaVE.pdf).
+
 ## Introduction
 
-**CaVE** (**Cone-aligned Vector Estimation**) is a cutting-edge machine learning methodology designed for the efficient and accurate solution of **predict-then-optimize** tasks within the domain of operations research. This innovative approach integrates predictive modeling with optimization algorithms, focusing on **Binary Linear Programming** (**BLP**) problems.
+**CaVE** (**Cone-aligned Vector Estimation**) is an efficient and accurate **Decision-focused Learning** / **End-to-end Predict-then-optimize** approach for **Binary Linear Programs** (BLPs).
 
 ## Key Features
 
-- **End-to-End:** CaVE integrates learning and optimization, delivering state-of-the-art performance.
-- **Efficiency:** Significantly improves computational efficiency.
-- **Scalability:** CaVE is adaptable to various problems with larger sizes and complexities.
+- **End-to-End:** The loss function of CaVE focuses on decision quality.
+- **Efficiency:** The algorithm of CaVE utilizes non-negative least squares (NNLSs) instead of solving BLPs.
 
 ## Dependencies
 
