@@ -114,6 +114,7 @@ class linearRegression(nn.Module):
     def forward(self, x):
         out = self.linear(x)
         return out
+
 reg = linearRegression()
 
 # set solver
