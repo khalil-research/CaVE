@@ -97,11 +97,11 @@ from src.dataset import optDatasetConstrs, collate_fn
 from src.cave import innerConeAlignedCosine
 
 # generate data
-num_node = 20 # node size
+num_node = 20  # node size
 num_data = 100 # number of training data
-num_feat = 10 # size of feature
-poly_deg = 4 # polynomial degree
-noise = 0.5 # noise width
+num_feat = 10  # size of feature
+poly_deg = 4   # polynomial degree
+noise = 0.5    # noise width
 feats, costs = pyepo.data.tsp.genData(num_data, num_feat, num_node, poly_deg, noise, seed=42)
 
 # build predictor
