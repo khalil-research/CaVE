@@ -194,7 +194,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
             solver (str): the QP solver to find projection
             max_iter (int): the maximum number of iterations
             solve_ratio (float): the ratio of solving QP during training
-            inner_ratio (float): the ratio to push projection inside
+            inner_ratio (float): the weight to push heuristic projection inside
             reduction (str): the reduction to apply to the output
             processes (int): number of processors, 1 for single-core, 0 for all of coress
         """
