@@ -227,5 +227,85 @@ class TestRegressionFixes(unittest.TestCase):
                         "Same seed produced different losses.")
 
 
+class TestAPGD(unittest.TestCase):
+    """
+    APGD solver tests. Requires torch.compile backend (Linux/WSL/GPU).
+    """
+
+    def setUp(self):
+        torch.manual_seed(0)
+        self.mock_optmodel = _mock_optmodel(EPO.MINIMIZE)
+        # set analog data for testing
+        self.len_cost = 10
+        self.num_binding_constrs = 15
+        self.batch_size = 8
+        self.mock_costs = torch.rand(self.batch_size, self.len_cost)
+        self.mock_bctrs = torch.rand(self.batch_size, self.num_binding_constrs, self.len_cost)
+
+    def testExactAPGD(self):
+        """
+        A test to check the exact APGD forward pass goes well.
+        """
+        # init loss with explicit APGD
+        cave = exactConeAlignedCosine(self.mock_optmodel, solver="apgd")
+        # forward pass
+        loss = cave(self.mock_costs, self.mock_bctrs)
+        # check loss is finite
+        self.assertTrue(torch.isfinite(loss).item(),
+                        "Loss is not finite.")
+        # cuda exist or not
+        if torch.cuda.is_available():
+            cave(self.mock_costs.cuda(), self.mock_bctrs.cuda())
+
+    def testInnerAPGD(self):
+        """
+        A test to check the inner APGD forward pass and auto-injected truncation.
+        """
+        # init loss
+        cave = innerConeAlignedCosine(self.mock_optmodel, solver="apgd", seed=42)
+        # check truncation kwargs got auto-injected
+        self.assertEqual(cave.solver_kwargs, {"max_iters": 20, "tol_grad": None},
+                         "inner APGD did not auto-inject truncation kwargs.")
+        # forward pass
+        loss = cave(self.mock_costs, self.mock_bctrs)
+        # check loss is finite
+        self.assertTrue(torch.isfinite(loss).item(),
+                        "Loss is not finite.")
+
+    def testAPGDvsClarabelClose(self):
+        """
+        A test to check APGD projection direction is close to Clarabel converged.
+        """
+        import torch.nn.functional as F
+        # non-degenerate cone: use Gaussian (both signs) so projection is non-trivial
+        torch.manual_seed(1)
+        costs = torch.randn(self.batch_size, self.len_cost)
+        bctrs = torch.randn(self.batch_size, self.num_binding_constrs, self.len_cost)
+        # apgd projection (exact mode)
+        cave_apgd = exactConeAlignedCosine(self.mock_optmodel, solver="apgd")
+        with torch.no_grad():
+            signed = -1.0 * costs
+            proj_apgd = cave_apgd._get_projection(signed, bctrs)
+        # clarabel projection (exact mode)
+        cave_cb = exactConeAlignedCosine(self.mock_optmodel, solver="clarabel")
+        with torch.no_grad():
+            proj_cb = cave_cb._get_projection(signed, bctrs)
+        # cosine similarity should be near 1
+        cos = F.cosine_similarity(proj_apgd, proj_cb, dim=1)
+        self.assertGreater(cos.min().item(), 0.95,
+                           "APGD projection direction diverged from Clarabel.")
+
+    def testAPGDInnerOverride(self):
+        """
+        A test to check user-supplied solver_kwargs override inner-mode defaults.
+        """
+        # user-supplied kwargs should NOT be replaced by inner defaults
+        custom = {"max_iters": 50, "tol_grad": 1e-3}
+        cave = innerConeAlignedCosine(self.mock_optmodel, solver="apgd",
+                                       solver_kwargs=custom, seed=42)
+        self.assertEqual(cave.solver_kwargs, custom,
+                         "User solver_kwargs got overridden by inner defaults.")
+
+
 if __name__ == "__main__":
     unittest.main()
