@@ -56,14 +56,8 @@ class abstractConeAlignedCosine(optModule):
     ) -> torch.Tensor:
         """
         Forward pass
-
-        Args:
-            pred_cost: (B, n) predicted cost vectors
-            tight_ctrs: (B, max_ctrs, n) zero-padded binding-constraint normals
-
-        Returns:
-            torch.Tensor: reduced cone-alignment loss in [0, 2]
         """
+        # sense-aware sign: flip cost into the cone of binding-constraint normals
         if self.optmodel.modelSense == EPO.MINIMIZE:
             sign = -1.0
         elif self.optmodel.modelSense == EPO.MAXIMIZE:
@@ -80,14 +74,7 @@ class abstractConeAlignedCosine(optModule):
         self, signed_cost: torch.Tensor, tight_ctrs: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Compute the projection target for each instance in the batch.
-
-        Args:
-            signed_cost: (B, n) sense-flipped predicted cost
-            tight_ctrs: (B, max_ctrs, n) zero-padded binding-constraint normals
-
-        Returns:
-            torch.Tensor: (B, n) projection target, detached from autograd
+        Compute the projection target for the batch
         """
 
 

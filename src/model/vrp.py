@@ -82,7 +82,7 @@ class vrpABModel(optGrbModel):
             if sol[i] > _EDGE_ACTIVE_TOL:
                 adj[u].append(v)
                 adj[v].append(u)
-        # peel one route at a time, each starting and ending at the depot
+        # peel one depot-anchored route at a time
         routes = []
         while adj[0]:
             v_curr = 0
@@ -92,7 +92,7 @@ class vrpABModel(optGrbModel):
             adj[v_next].remove(v_curr)
             while v_next != 0:
                 tour.append(v_next)
-                # single-customer dead-end falls back to the depot
+                # single-customer dead-end falls back to depot
                 if not adj[v_next]:
                     v_curr, v_next = v_next, 0
                 else:
@@ -104,8 +104,10 @@ class vrpABModel(optGrbModel):
         return routes
 
     def copy(self) -> vrpABModel:
-        """Return a freshly constructed model with the same problem parameters."""
-        # fresh build re-populates callback state (``_x``, ``_lazy_constrs``, ...) on the new Gurobi model
+        """
+        A method to copy the model
+        """
+        # fresh build to re-populate callback state on the new Gurobi model
         return type(self)(self.num_nodes, self.demands, self.capacity, self.num_vehicle)
 
 
@@ -134,11 +136,11 @@ class vrpModel(vrpABModel):
             x[j, i] = x[i, j]
         # sense
         m.modelSense = GRB.MINIMIZE
-        # depot degree (<= 2 per vehicle: arrival + departure)
-        m.addConstr(x.sum(0, "*") <= 2 * self.num_vehicle)
+        # depot degree
+        m.addConstr(x.sum(0, "*") <= 2 * self.num_vehicle)  # 2 per vehicle
         # customer 2-degree
         m.addConstrs(x.sum(i, "*") == 2 for i in self.nodes if i != 0)
-        # state read by ``_vrpCallback`` during branch-and-cut
+        # callback state
         m._x = x
         m._n = self.num_nodes
         m._q = {i: self.demands[i - 1] for i in self.nodes[1:]}
@@ -147,7 +149,7 @@ class vrpModel(vrpABModel):
         m._lazy_constrs = []
         # activate lazy constraints
         m.Params.lazyConstraints = 1
-        # cost-aligned variable cache for batched setAttr/getAttr
+        # one unique Var per undirected edge (x[j,i] aliases x[i,j])
         self._cost_vars: list = [x[e] for e in self.edges]
         return m, x
 
@@ -171,36 +173,35 @@ class vrpModel(vrpABModel):
         Returns:
             tuple: edge-selection vector (uint8) and objective value (float)
         """
-        # branch-and-cut with rounded-capacity / subtour separation
+        # optimize
         self._model.optimize(self._vrpCallback)
-        # threshold X to a binary selection vector
+        # threshold to binary selection
         xvals = np.asarray(self._model.getAttr("X", self._cost_vars))
         sol = (xvals > _EDGE_ACTIVE_TOL).astype(np.uint8)
         return sol, self._model.objVal
 
     @staticmethod
     def _vrpCallback(model, where):
-        """A static method to add k-path lazy constraints (rounded capacity / subtour)."""
-        # only act on integer-feasible incumbents
+        """
+        A static method to add lazy constraints for rounded capacity / subtour
+        """
         if where != GRB.Callback.MIPSOL:
             return
-        # union customer-side active edges to find connected components
+        # customer-side active edges
         uf = unionFind(model._n)
         for u, v in model._edges:
-            # depot edges aren't part of customer-side connectivity
             if u == 0 or v == 0:
                 continue
             if model.cbGetSolution(model._x[u, v]) > _EDGE_ACTIVE_TOL:
                 uf.union(u, v)
-        # add a rounded-capacity / subtour cut for each non-trivial component
+        # rounded-capacity / subtour cut per non-trivial component
         for component in _uf_components(uf):
             if len(component) < 3:
                 continue
-            # rounded number of vehicles needed for this component
+            # rounded number of vehicles
             k = int(np.ceil(sum(model._q[v] for v in component) / model._Q))
-            # interior edges of the component
+            # interior edges
             edges_s = [(u, v) for u in component for v in component if u < v]
-            # cut fires when interior edges saturate OR more than one vehicle is needed
             if (len(edges_s) >= len(component)) or (k > 1):
                 constr = gp.quicksum(model._x[e] for e in edges_s) <= len(component) - k
                 model.cbLazy(constr)
@@ -276,9 +277,9 @@ class vrpModel2(vrpABModel):
         Returns:
             tuple: edge-selection vector (uint8) and objective value (float)
         """
-        # optimize (no lazy cuts for MTZ formulation)
+        # optimize
         self._model.optimize()
-        # collapse the directed pair back to an undirected selection per edge
+        # collapse directed pair to undirected selection per edge
         xvals = np.asarray(self._model.getAttr("X", self._cost_vars)).reshape(-1, 2)
         sol = (xvals > _EDGE_ACTIVE_TOL).any(axis=1).astype(np.uint8)
         return sol, self._model.objVal
@@ -334,10 +335,10 @@ class vrpModel2Rel(vrpModel2):
 
     def solve(self) -> tuple[np.ndarray, float]:
         """
-        A method to solve the model — returns fractional edge selections.
+        A method to solve the model — returns fractional edge selections
         """
         self._model.optimize()
-        # sum the directed pair to a per-edge fractional value
+        # sum directed pair to per-edge fractional value
         xvals = np.asarray(self._model.getAttr("X", self._cost_vars)).reshape(-1, 2)
         return xvals.sum(axis=1), self._model.objVal
 
