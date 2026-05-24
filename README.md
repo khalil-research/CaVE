@@ -31,6 +31,22 @@ There is a talk on our paper at the CPAIOR 2024 conference. You can view the sli
 - **End-to-End:** The loss function of CaVE focuses on decision quality.
 - **Efficiency:** The algorithm of CaVE utilizes non-negative least squares (NNLSs) instead of solving BLPs.
 
+## What's New: Batched GPU APGD Solver
+
+A new solver `'apgd'` (Nesterov-Accelerated Projected Gradient Descent) is now the **default backend**. It batches the cone projection across the entire batch as a single dense GPU operation via `torch.compile`, eliminating per-instance solver overhead.
+
+### Speedup vs Clarabel (forward + backward, batch=32, RTX 5080)
+
+| Problem shape | APGD GPU (new) | Clarabel CPU cached | NNLS CPU | Speedup vs Clarabel |
+|---|---|---|---|---|
+| n=28, m=56 (small) | **1.8 ms** | 34.5 ms | 20.2 ms | **19×** |
+| n=45, m=66 (TSP-10) | **1.4 ms** | 53.1 ms | 27.4 ms | **36×** |
+| n=91, m=121 (TSP-15) | **1.7 ms** | 613 ms | 100.9 ms | **365×** |
+
+APGD throughput stays roughly constant with problem size while interior-point methods scale poorly.
+
+The legacy `'clarabel'` and `'nnls'` solvers remain available for reproducibility — pass `solver='clarabel'` or `solver='nnls'` to either loss module.
+
 ## Dependencies
 
 The project depends on the following packages. The listed versions are used for our experiments, but other versions may also work:
@@ -62,7 +78,8 @@ The ``exactConeAlignedCosine`` class is an autograd module for computing the **C
 #### Parameters
 
 - `optmodel` (`optModel`): An instance of the PyEPO optimization model.
-- `solver` (`str`, optional): The QP solver finds the projection. Options include `'clarabel'` and `'nnls'`. The Default is `'clarabel'`.
+- `solver` (`str`, optional): The QP solver for the projection. Options include `'apgd'` (batched GPU APGD), `'clarabel'` (cvxpy) and `'nnls'` (scipy). The default is `'apgd'`.
+- `solver_kwargs` (`dict`, optional): Backend-specific tuning passed through to the solver (e.g. `{'max_iters': 200, 'tol_grad': 1e-3}` for APGD). The default is `None` (use solver defaults).
 - `reduction` (`str`, optional): The reduction to apply to the output. Options include `'mean'`, `'sum'`, and `'none'`. The default is `'mean'`.
 - `processes` (`int`, optional): Number of processors. `1` is for single-core, and `0` is for using all cores. The default is `1`.
 
@@ -73,12 +90,14 @@ The ``innerConeAlignedCosine`` class is an autograd module for computing the **C
 #### Parameters
 
 - `optmodel` (`optModel`): An instance of the PyEPO optimization model.
-- `solver` (`str`, optional): The QP solver finds the projection. Options include `'clarabel'` and `'nnls'`. The Default is `'clarabel'`.
-- `max_iter` (`int`, optional): The maximum number of iterations for solving the QP during training. The default is `3`.
-- `solve_ratio` (`float`, optional): The ratio of solving QP during training. Ranges from `0` to `1`. The default is `1`.
-- `inner_ratio` (`float`, optional): The weight to push the heurstic projection inside. Ranges from `0` to `1`. The default is `0.2`.
+- `solver` (`str`, optional): The QP solver for the projection. Options include `'apgd'`, `'clarabel'` and `'nnls'`. The default is `'apgd'`.
+- `solver_kwargs` (`dict`, optional): Backend-specific tuning. When `None` (default) and `solver='apgd'`, inner mode auto-injects `{'max_iters': 20, 'tol_grad': None}` for truncated APGD (lands inside the cone).
+- `max_iter` (`int`, optional): The maximum Clarabel iterations for the inner-truncated projection. The default is `3`.
+- `solve_ratio` (`float`, optional): The probability per batch of running the QP projection. Ranges from `0` to `1`. The default is `1`.
+- `inner_ratio` (`float`, optional): The weight to push the heuristic projection inside. Ranges from `0` to `1`. The default is `0.2`.
 - `reduction` (`str`, optional): The reduction to apply to the output. Options include `'mean'`, `'sum'`, and `'none'`. The default is `'mean'`.
 - `processes` (`int`, optional): Number of processors. `1` is for single-core, and `0` is for using all cores. The default is `1`.
+- `seed` (`int`, optional): Seed for the per-batch QP-vs-heuristic branch RNG. The default is `None`.
 
 ## Sample Code
 
@@ -125,8 +144,8 @@ dataset = optDatasetConstrs(optmodel, feats, costs)
 # get data loader
 dataloader = DataLoader(dataset, batch_size=32, collate_fn=collate_fn, shuffle=True)
 
-# init loss
-cave = innerConeAlignedCosine(optmodel, solver="clarabel", processes=1)
+# init loss (solver defaults to 'apgd' for batched GPU projection)
+cave = innerConeAlignedCosine(optmodel, processes=1)
 # set optimizer
 optimizer = torch.optim.Adam(reg.parameters(), lr=1e-2)
 
