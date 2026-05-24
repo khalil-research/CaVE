@@ -1,317 +1,283 @@
 #!/usr/bin/env python
-# coding: utf-8
 """
-An autograd module for cone-aligned loss
+Cone-aligned vector estimation (CaVE) loss for binary linear programs
 """
 
-from abc import ABC, abstractmethod
+from __future__ import annotations
 
-import cvxpy as cvx
+from abc import abstractmethod
+from typing import TYPE_CHECKING
+
 import numpy as np
-from pathos.multiprocessing import ProcessingPool
-from scipy.optimize import nnls
 import torch
-from torch import nn
+from scipy.optimize import nnls
 from torch.nn import functional as F
 
 from pyepo import EPO
-from pyepo.model.opt import optModel
+from pyepo.func.abcmodule import optModule
 
-class abstractConeAlignedCosine(nn.Module, ABC):
+try:
+    import cvxpy as cvx
+    _HAS_CVXPY = True
+except ImportError:
+    _HAS_CVXPY = False
+
+if TYPE_CHECKING:
+    from pyepo.func.abcmodule import Reduction
+    from pyepo.model.opt import optModel
+
+
+class abstractConeAlignedCosine(optModule):
     """
-    An abstract base class for CaVE loss.
+    An abstract autograd module for the CaVE family of cone-aligned cosine
+    losses. Subclasses project the sense-flipped predicted cost vector onto
+    the polyhedral cone spanned by binding-constraint normals at the optimal
+    vertex; the loss is ``1 - cos(pred, proj)``.
+
+    Reference: <https://link.springer.com/chapter/10.1007/978-3-031-60599-4_12>
     """
-    def __init__(self, optmodel, reduction="mean", processes=1):
+
+    def __init__(
+        self,
+        optmodel: optModel,
+        processes: int = 1,
+        reduction: Reduction = "mean",
+    ) -> None:
         """
-        Initialize the abstract class with an optimization model.
         Args:
-            optmodel (optModel): an PyEPO optimization model
-            reduction (str): the reduction to apply to the output
-            processes (int): number of processors, 1 for single-core, 0 for all of coress
+            optmodel: a PyEPO optimization model
+            processes: number of processors, 1 for single-core, 0 for all of cores
+            reduction: the reduction to apply to the output
         """
-        super().__init__()
-        if not isinstance(optmodel, optModel):
-            raise TypeError("arg model is not an optModel")
-        # cost vectors direction
-        if optmodel.modelSense == EPO.MINIMIZE:
-            # set vector sign to -1 for minimization
-            self.vec_sign = -1
+        super().__init__(optmodel, processes, solve_ratio=1.0, reduction=reduction)
+
+    def forward(
+        self, pred_cost: torch.Tensor, tight_ctrs: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Forward pass
+
+        Args:
+            pred_cost: (B, n) predicted cost vectors
+            tight_ctrs: (B, max_ctrs, n) zero-padded binding-constraint normals
+
+        Returns:
+            torch.Tensor: reduced cone-alignment loss in [0, 2]
+        """
+        if self.optmodel.modelSense == EPO.MINIMIZE:
+            sign = -1.0
+        elif self.optmodel.modelSense == EPO.MAXIMIZE:
+            sign = 1.0
         else:
-            # set vector sign to 1 for maximization
-            self.vec_sign = 1
-        # method for aggregating the loss
-        self.reduction = reduction
-        if self.reduction not in ["mean", "sum", "none"]:
-            message = ValueError("No reduction '{}'.".format(self.reduction))
-        # number of processes
-        self.processes = mp.cpu_count() if not processes else processes
-        # multi-core
-        if self.processes > 1:
-            # create a processes pool
-            self.pool = ProcessingPool(self.processes)
-        print("Num of cores: {}".format(self.processes))
-
-    def forward(self, pred_cost, tight_ctrs):
-        """
-        A Forward pass method.
-        """
-        loss = self._calLoss(pred_cost, tight_ctrs)
-        # loss reduction
-        if self.reduction == "mean":
-            loss = torch.mean(loss)
-        if self.reduction == "sum":
-            loss = torch.sum(loss)
-        if self.reduction == "none":
-            loss = loss
-        return loss
-
-    def _calLoss(self, pred_cost, tight_ctrs):
-        """
-        A method to calculate loss.
-        """
-        # change cost vectors direction
-        pred_cost = self.vec_sign * pred_cost
-        # get projection
-        proj = self._getProjection(pred_cost, tight_ctrs)
-        # calculate cosine similarity between predicted costs and their projections
-        loss = - F.cosine_similarity(pred_cost, proj, dim=1)
-        return loss
+            raise ValueError("Invalid modelSense. Must be EPO.MINIMIZE or EPO.MAXIMIZE.")
+        signed_cost = sign * pred_cost
+        proj = self._get_projection(signed_cost, tight_ctrs)
+        loss = 1.0 - F.cosine_similarity(signed_cost, proj, dim=1)
+        return self._reduce(loss)
 
     @abstractmethod
-    def _getProjection(self, pred_cost, tight_ctrs):
+    def _get_projection(
+        self, signed_cost: torch.Tensor, tight_ctrs: torch.Tensor,
+    ) -> torch.Tensor:
         """
-        Abstract method to obtain projection.
+        Compute the projection target for each instance in the batch.
+
+        Args:
+            signed_cost: (B, n) sense-flipped predicted cost
+            tight_ctrs: (B, max_ctrs, n) zero-padded binding-constraint normals
+
+        Returns:
+            torch.Tensor: (B, n) projection target, detached from autograd
         """
-        pass
 
 
 class exactConeAlignedCosine(abstractConeAlignedCosine):
     """
-    An autograd module for CaVE Exact
+    An autograd module for the CaVE Exact loss. Solves a full non-negative
+    least-squares projection of the sense-flipped predicted cost onto the
+    cone spanned by binding-constraint normals at the optimal vertex.
+
+    Reference: <https://link.springer.com/chapter/10.1007/978-3-031-60599-4_12>
     """
-    def __init__(self, optmodel, solver="clarabel", reduction="mean", processes=1):
+
+    def __init__(
+        self,
+        optmodel: optModel,
+        solver: str = "clarabel",
+        processes: int = 1,
+        reduction: Reduction = "mean",
+    ) -> None:
         """
         Args:
-            optmodel (optModel): an PyEPO optimization model
-            solver (str): the QP solver to find projection
-            reduction (str): the reduction to apply to the output
-            processes (int): number of processors, 1 for single-core, 0 for all of coress
+            optmodel: a PyEPO optimization model
+            solver: QP solver for the projection, 'clarabel' (cvxpy) or 'nnls' (scipy)
+            processes: number of processors, 1 for single-core, 0 for all of cores
+            reduction: the reduction to apply to the output
         """
-        super().__init__(optmodel, reduction, processes)
-        # choose between 'clarabel' or 'nnls' as the QP solver.
+        super().__init__(optmodel, processes, reduction)
+        if solver not in ("clarabel", "nnls"):
+            raise ValueError(f"Invalid solver: {solver}. Must be 'clarabel' or 'nnls'.")
+        if solver == "clarabel" and not _HAS_CVXPY:
+            raise ImportError(
+                "cvxpy is not installed. Install with `pip install 'cvxpy[clarabel]'` "
+                "to use the 'clarabel' solver, or pass solver='nnls'."
+            )
         self.solver = solver
-        if self.solver not in ["clarabel", "nnls"]:
-            message = "Invalid solver: {}. Must be 'clarabel' or 'nnls'.".format(self.solver)
-            raise ValueError(message)
-        # clarabel which has better scalability
-        if self.solver == "clarabel":
-            self._solveQP = self._solveClarabel
-        # nnls from scipy which is very fast for small problems
-        if self.solver == "nnls":
-            self._solveQP = self._solveNNLS
 
-    def _getProjection(self, pred_cost, tight_ctrs):
-        """
-        A method to get the exact projection onto the optimal subcone.
-        """
-        # get device for output tensor placement
-        device = pred_cost.device
-        # to numpy
-        pred_cost = pred_cost.detach().cpu().numpy()
-        tight_ctrs = tight_ctrs.detach().cpu().numpy()
-        # single-core
-        if self.processes == 1:
-            # init empty tensor
-            proj = torch.empty(pred_cost.shape).to(device)
-            # calculate projections per instance
-            for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                # solve QP
-                proj[i], _ = self._solveQP(cp, ctr)
-        # multi-core
-        else:
-            # calculate projections with pool
-            res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs).get()
-            # the projection
-            proj, _ = zip(*res)
-            proj = torch.stack(proj, dim=0).to(device)
-        # normalize
-        # QUESTION: Do we need to normalize it?
-        vec = proj / proj.norm(dim=1, keepdim=True)
-        return vec
-
-    @staticmethod
-    def _solveQP(cp, ctr):
-        """
-        A unimplemented method requires to solve QP
-        """
-        raise ValueError("No solver and its corresponding '_solveQP' method.")
-
-    @staticmethod
-    def _solveClarabel(cp, ctr):
-        """
-        A static method to solve quadratic programming with Clarabel
-        """
-        # remove zero-padding from binding constraints
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
-        # decision varibles λ
-        λ = cvx.Variable(len(ctr), name="λ", nonneg=True)
-        # onjective function ||cp - λ ctr||^2
-        objective = cvx.Minimize(cvx.sum_squares(cp - λ @ ctr))
-        # ceate an optimization problem model
-        problem = cvx.Problem(objective)
-        # solve with Clarabel
-        problem.solve(solver=cvx.CLARABEL)
-        # obtain the closest projection on the surface of the cone
-        p = λ.value @ ctr
-        # compute residuals as the Euclidean distance between prediction and projection
-        rnorm = problem.value
-        return torch.tensor(p, dtype=torch.float32), rnorm
-
-    @staticmethod
-    def _solveNNLS(cp, ctr):
-        """
-        A static method to solve quadratic programming with scipy
-        """
-        # remove zero-padding from binding constraints
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
-        # solve as non-negaitive least square (using the active set method)
-        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.nnls.html
-        λ, rnorm = nnls(ctr.T, cp)
-        # compute residuals as the Euclidean distance between prediction and projection
-        p = λ @ ctr
-        return torch.tensor(p, dtype=torch.float32), rnorm
+    def _get_projection(
+        self, signed_cost: torch.Tensor, tight_ctrs: torch.Tensor,
+    ) -> torch.Tensor:
+        proj, _ = _batch_project(
+            signed_cost, tight_ctrs, self.solver, max_iter=None,
+            processes=self.processes, pool=self.pool,
+        )
+        return proj / proj.norm(dim=1, keepdim=True).clamp(min=1e-8)
 
 
 class innerConeAlignedCosine(exactConeAlignedCosine):
     """
-    An autograd module for CaVE+ and CaVE Hybrid.
+    An autograd module for the CaVE+ and CaVE Hybrid losses. Combines an
+    inner-truncated cone projection (Clarabel with early termination, or
+    NNLS pushed inside via a convex combination with the average normal)
+    with an optional cheap heuristic branch.
+
+    With ``solve_ratio == 1`` this is CaVE+; with ``solve_ratio < 1`` it is
+    CaVE Hybrid, taking the heuristic branch with probability ``1 - solve_ratio``.
+
+    Reference: <https://link.springer.com/chapter/10.1007/978-3-031-60599-4_12>
     """
-    def __init__(self, optmodel, solver="clarabel", max_iter=3, solve_ratio=1,
-                 inner_ratio=0.2, reduction="mean", processes=1):
+
+    def __init__(
+        self,
+        optmodel: optModel,
+        solver: str = "clarabel",
+        max_iter: int = 3,
+        solve_ratio: float = 1.0,
+        inner_ratio: float = 0.2,
+        processes: int = 1,
+        reduction: Reduction = "mean",
+        seed: int | None = None,
+    ) -> None:
         """
         Args:
-            optmodel (optModel): an PyEPO optimization model
-            solver (str): the QP solver to find projection
-            max_iter (int): the maximum number of iterations
-            solve_ratio (float): the ratio of solving QP during training
-            inner_ratio (float): the weight to push heuristic projection inside
-            reduction (str): the reduction to apply to the output
-            processes (int): number of processors, 1 for single-core, 0 for all of coress
+            optmodel: a PyEPO optimization model
+            solver: QP solver for the projection, 'clarabel' (cvxpy) or 'nnls' (scipy)
+            max_iter: Clarabel iteration budget for the inner-truncated projection
+            solve_ratio: probability per batch of running the QP projection;
+                with complementary probability the cheap heuristic branch is taken
+            inner_ratio: weight on the average normal in the heuristic and in
+                the post-NNLS push-inside step
+            processes: number of processors, 1 for single-core, 0 for all of cores
+            reduction: the reduction to apply to the output
+            seed: seed for the per-batch QP-vs-heuristic branch RNG
         """
-        super().__init__(optmodel, solver, reduction, processes)
-        # maximum iterations
-        self.max_iter = max_iter
-        # solve ratio
-        self.solve_ratio = solve_ratio
-        # check if value is valid [0,1]
-        if (self.solve_ratio < 0) or (self.solve_ratio > 1):
-            raise ValueError("Invalid solving ratio {}. It should be between 0 and 1.".
-                format(self.solve_ratio))
-        # inner ratio
-        self.inner_ratio = inner_ratio
-        # check if value is valid [0,1]
-        if (self.inner_ratio < 0) or (self.inner_ratio > 1):
-            raise ValueError("Invalid inner ratio {}. It should be between 0 and 1.".
-                format(self.inner_ratio))
+        super().__init__(optmodel, solver, processes, reduction)
+        if not 0 <= solve_ratio <= 1:
+            raise ValueError(
+                f"Invalid solve_ratio {solve_ratio}. It should be between 0 and 1."
+            )
+        if not 0 <= inner_ratio <= 1:
+            raise ValueError(
+                f"Invalid inner_ratio {inner_ratio}. It should be between 0 and 1."
+            )
+        self.max_iter = int(max_iter)
+        self.solve_ratio = float(solve_ratio)
+        self.inner_ratio = float(inner_ratio)
+        if seed is not None:
+            self._branch_rng = np.random.RandomState(seed)
 
-    def _getProjection(self, pred_cost, tight_ctrs):
-        """
-        A method to get the inner projection inside the optimal subcone.
-        """
-        # get device
-        device = pred_cost.device
-        # get average of the (normalized) binding constraints
-        avg = self._getAvg(tight_ctrs)
-        # inner project with QP
-        if np.random.uniform() <= self.solve_ratio:
-            # to numpy
-            pred_cost = pred_cost.detach().cpu().numpy()
-            tight_ctrs = tight_ctrs.detach().cpu().numpy()
-             # single-core
-            if self.processes == 1:
-                # init empty tensor
-                proj = torch.empty(pred_cost.shape).to(device)
-                rnorm = torch.empty(pred_cost.shape[0]).to(device)
-                # calculate projections per instance
-                for i, (cp, ctr) in enumerate(zip(pred_cost, tight_ctrs)):
-                    # solve QP
-                    proj[i], rnorm[i] = self._solveQP(cp, ctr, self.max_iter)
-            # multi-core
-            else:
-                # calculate projections with pool
-                res = self.pool.amap(self._solveQP, pred_cost, tight_ctrs,
-                                     [self.max_iter]*len(pred_cost)).get()
-                proj, rnorm = zip(*res)
-                # the projection
-                proj = torch.stack(proj, dim=0).to(device)
-                # the residuals
-                rnorm = torch.tensor(rnorm).to(device)
-            # normalize
-            proj = proj / proj.norm(dim=1, keepdim=True)
-            # limit the max_iter for clarabel
-            if self.solver == "clarabel":
-                # already get inner projection
-                vec = proj
-            # manually push projection inside for scipy.nnls
-            else:
-                # get excact projection
-                # push vector inside by a convex combination of projection and average
-                vec = (1 - self.inner_ratio) * proj + self.inner_ratio * avg
-                # keep excact projection if already in the cone
-                vec[rnorm < 1e-7] = proj[rnorm < 1e-7]
-        # hueristic projection
-        else:
-            # normalize prediction (avoid the unbalanced weights)
-            pred_norm = pred_cost / pred_cost.norm(dim=1, keepdim=True)
-            # a convex combination of prediction and average
-            vec = (1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg
-        return vec.detach()
+    def _get_projection(
+        self, signed_cost: torch.Tensor, tight_ctrs: torch.Tensor,
+    ) -> torch.Tensor:
+        avg = _average_ctrs(tight_ctrs)
+        # heuristic branch: skip the QP, convex-combine pred with the average normal
+        if self._branch_rng.uniform() > self.solve_ratio:
+            pred_norm = signed_cost / signed_cost.norm(dim=1, keepdim=True).clamp(min=1e-8)
+            return ((1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg).detach()
+        # QP branch with truncated iterations
+        proj, rnorm = _batch_project(
+            signed_cost, tight_ctrs, self.solver, max_iter=self.max_iter,
+            processes=self.processes, pool=self.pool,
+        )
+        proj_norm = proj / proj.norm(dim=1, keepdim=True).clamp(min=1e-8)
+        # Clarabel with truncated iterations already lands strictly inside the cone
+        if self.solver == "clarabel":
+            return proj_norm.detach()
+        # NNLS solves to the cone boundary, so nudge inside via the average normal,
+        # except for instances already inside (zero residual) which keep the exact projection
+        pushed = (1 - self.inner_ratio) * proj_norm + self.inner_ratio * avg
+        inside = (rnorm < 1e-7).unsqueeze(1)
+        return torch.where(inside, proj_norm, pushed).detach()
 
-    def _getAvg(self, tight_ctrs):
-        """
-        A method to get average of binding constraints
-        """
-        # normalize
-        tight_ctrs = tight_ctrs / (tight_ctrs.norm(dim=2, keepdim=True) + 1e-8)
-        # average for each instance
-        avg = tight_ctrs.mean(dim=1).detach()
-        return avg
 
-    @staticmethod
-    def _solveClarabel(cp, ctr, max_iter):
-        """
-        A static method to solve quadratic programming with Clarabel
-        """
-        # remove zero-padding from binding constraints
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
-        # decision varibles λ
-        λ = cvx.Variable(len(ctr), name="λ", nonneg=True)
-        # onjective function ||cp - λ ctr||^2
-        objective = cvx.Minimize(cvx.sum_squares(cp - λ @ ctr))
-        # ceate an optimization problem model
-        problem = cvx.Problem(objective)
-        # solve with Clarabel with limited iteration for the suboptimal
-        problem.solve(solver=cvx.CLARABEL, max_iter=max_iter)
-        # get inner projection (which is inside the cone)
-        p = λ.value @ ctr
-        # compute residuals as the Euclidean distance between prediction and projection
-        rnorm = problem.value
-        return torch.tensor(p, dtype=torch.float32), rnorm
+def _average_ctrs(tight_ctrs: torch.Tensor) -> torch.Tensor:
+    """Per-instance average of unit-normalized binding-constraint normals (zero-padded rows excluded)."""
+    norms = tight_ctrs.norm(dim=2, keepdim=True)
+    valid = (norms > 1e-7).to(tight_ctrs.dtype)
+    unit = tight_ctrs / norms.clamp(min=1e-8) * valid
+    n_valid = valid.sum(dim=1).clamp(min=1.0)
+    return (unit.sum(dim=1) / n_valid).detach()
 
-    @staticmethod
-    def _solveNNLS(cp, ctr, max_iter):
-        """
-        A static method to solve quadratic programming with scipy
-        """
-        # WARNING: set max_iter will lead infeasibility and the solution will not be available
-        # Now, the max_iter is set to unlimited, but the project will be push inside later
-        # by a convex combination of exact projection and average binding constraints
-        max_iter = None
-        # drop pads
-        ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
-        # solve as non-negaitive least square (using the active set method)
-        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.nnls.html
-        λ, rnorm = nnls(ctr.T, cp, maxiter=max_iter)
-        # obtain the closest projection on the surface of the cone
-        p = λ @ ctr
-        return torch.tensor(p, dtype=torch.float32), rnorm
+
+def _batch_project(
+    signed_cost: torch.Tensor,
+    tight_ctrs: torch.Tensor,
+    solver: str,
+    max_iter: int | None,
+    processes: int,
+    pool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Map per-instance cone projections; returns (proj, rnorm) on signed_cost's device."""
+    device, dtype = signed_cost.device, signed_cost.dtype
+    cp_np = signed_cost.detach().cpu().numpy()
+    ctrs_np = tight_ctrs.detach().cpu().numpy()
+    batch = len(cp_np)
+    if solver == "clarabel":
+        worker = _project_clarabel
+    elif solver == "nnls":
+        worker = _project_nnls
+    else:
+        raise ValueError(f"Invalid solver: {solver}. Must be 'clarabel' or 'nnls'.")
+    if processes == 1:
+        results = [worker(cp_np[i], ctrs_np[i], max_iter) for i in range(batch)]
+    else:
+        results = pool.amap(worker, list(cp_np), list(ctrs_np), [max_iter] * batch).get()
+    proj_np = np.stack([r[0] for r in results])
+    rnorm_np = np.asarray([r[1] for r in results], dtype=np.float32)
+    proj = torch.as_tensor(proj_np, dtype=dtype, device=device)
+    rnorm = torch.as_tensor(rnorm_np, dtype=dtype, device=device)
+    return proj, rnorm
+
+
+def _project_clarabel(
+    cp: np.ndarray, ctr: np.ndarray, max_iter: int | None,
+) -> tuple[np.ndarray, float]:
+    """Project cp onto cone{lam @ ctr : lam >= 0} via Clarabel; returns (projection, residual norm)."""
+    ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
+    if len(ctr) == 0:
+        return cp.astype(np.float32), 0.0
+    lam = cvx.Variable(len(ctr), nonneg=True)
+    objective = cvx.Minimize(cvx.sum_squares(cp - lam @ ctr))
+    problem = cvx.Problem(objective)
+    solve_kwargs: dict = {"solver": cvx.CLARABEL}
+    if max_iter is not None:
+        solve_kwargs["max_iter"] = max_iter
+    problem.solve(**solve_kwargs)
+    if lam.value is None:
+        return cp.astype(np.float32), float("inf")
+    p = lam.value @ ctr
+    return p.astype(np.float32), float(problem.value)
+
+
+def _project_nnls(
+    cp: np.ndarray, ctr: np.ndarray, max_iter: int | None,
+) -> tuple[np.ndarray, float]:
+    """Project cp onto cone{lam @ ctr : lam >= 0} via SciPy NNLS; returns (projection, residual norm)."""
+    del max_iter
+    ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
+    if len(ctr) == 0:
+        return cp.astype(np.float32), 0.0
+    ctr_T = np.asfortranarray(ctr.T)
+    lam, rnorm = nnls(ctr_T, cp)
+    p = lam @ ctr
+    return p.astype(np.float32), float(rnorm)
