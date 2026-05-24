@@ -154,46 +154,65 @@ def _extract_tight_normals(
     cost_vars: list = model._cost_vars
     num_cost = len(cost_vars)
     sol_np = np.asarray(sol, dtype=np.float64)
-    rows: list[np.ndarray] = []
-    # explicit constraints
+    chunks: list[np.ndarray] = []
+    # explicit constraints: batch slack + sense + vectorized sign flip
     constrs = grb.getConstrs()
     if constrs:
         slacks = np.asarray(grb.getAttr("Slack", constrs))
-        senses = grb.getAttr("Sense", constrs)
+        senses_arr = np.asarray(grb.getAttr("Sense", constrs))
         tight_mask = np.abs(slacks) < tol
         if tight_mask.any():
             # project the constraint matrix onto cost-variable columns
             cost_col_idx = np.asarray([v.index for v in cost_vars])
             A = grb.getA().tocsr()
-            A_cost = A[:, cost_col_idx]
-            for row_idx in np.where(tight_mask)[0]:
-                row = A_cost[row_idx].toarray().ravel()
-                rows.extend(_orient_row(row, senses[row_idx]))
+            # extract all tight rows in a single sparse-to-dense conversion
+            A_tight = A[:, cost_col_idx][tight_mask].toarray()
+            tight_senses = senses_arr[tight_mask]
+            is_le = tight_senses == GRB.LESS_EQUAL
+            is_ge = tight_senses == GRB.GREATER_EQUAL
+            is_eq = tight_senses == GRB.EQUAL
+            if not (is_le | is_ge | is_eq).all():
+                bad = tight_senses[~(is_le | is_ge | is_eq)][0]
+                raise ValueError(f"Invalid constraint sense {bad!r}.")
+            # <= kept as-is, >= negated, == contributes ± rows
+            if is_le.any():
+                chunks.append(A_tight[is_le])
+            if is_ge.any():
+                chunks.append(-A_tight[is_ge])
+            if is_eq.any():
+                chunks.append(A_tight[is_eq])
+                chunks.append(-A_tight[is_eq])
     # lazy constraints: evaluate LHS at the optimum to derive slack
     var_to_cost: dict[str, int] = {v.VarName: k for k, v in enumerate(cost_vars)}
+    lazy_rows: list[np.ndarray] = []
     for tc in getattr(grb, "_lazy_constrs", []):
         coefs, rhs, sense = _temp_constr_to_cost_row(tc, var_to_cost, num_cost)
         if coefs is None:
             continue
         lhs_val = float(coefs @ sol_np)
         if abs(rhs - lhs_val) < tol:
-            rows.extend(_orient_row(coefs, sense))
-    # binary variable bounds
-    for k in range(num_cost):
-        # tight at 0: -x_k <= 0
-        if sol_np[k] <= tol:
-            row = np.zeros(num_cost, dtype=np.float64)
-            row[k] = -1.0
-            rows.append(row)
-        # tight at 1: x_k <= 1
-        elif sol_np[k] >= 1 - tol:
-            row = np.zeros(num_cost, dtype=np.float64)
-            row[k] = 1.0
-            rows.append(row)
+            lazy_rows.extend(_orient_row(coefs, sense))
+    if lazy_rows:
+        chunks.append(np.asarray(lazy_rows))
+    # binary variable bounds: vectorized via masks (mutually exclusive)
+    low_mask = sol_np <= tol
+    high_mask = (sol_np >= 1 - tol) & ~low_mask
+    n_low = int(low_mask.sum())
+    n_high = int(high_mask.sum())
+    # tight at 0: -e_k rows
+    if n_low > 0:
+        low_rows = np.zeros((n_low, num_cost), dtype=np.float64)
+        low_rows[np.arange(n_low), np.where(low_mask)[0]] = -1.0
+        chunks.append(low_rows)
+    # tight at 1: +e_k rows
+    if n_high > 0:
+        high_rows = np.zeros((n_high, num_cost), dtype=np.float64)
+        high_rows[np.arange(n_high), np.where(high_mask)[0]] = 1.0
+        chunks.append(high_rows)
     # empty fallback
-    if not rows:
+    if not chunks:
         return np.zeros((0, num_cost), dtype=np.float32)
-    return np.asarray(rows, dtype=np.float32)
+    return np.vstack(chunks).astype(np.float32)
 
 
 def _orient_row(row: np.ndarray, sense: str) -> list[np.ndarray]:

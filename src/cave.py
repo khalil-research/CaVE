@@ -6,6 +6,7 @@ Cone-aligned vector estimation (CaVE) loss for binary linear programs
 from __future__ import annotations
 
 from abc import abstractmethod
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -235,24 +236,35 @@ def _batch_project(
     return proj, rnorm
 
 
+@lru_cache(maxsize=None)
+def _build_clarabel_problem(n_active: int, num_cost: int) -> tuple:
+    """Build a parametric Problem template reused for every projection of this shape."""
+    cp_param = cvx.Parameter(num_cost)
+    ctr_param = cvx.Parameter((n_active, num_cost))
+    lam_var = cvx.Variable(n_active, nonneg=True)
+    problem = cvx.Problem(cvx.Minimize(cvx.sum_squares(cp_param - lam_var @ ctr_param)))
+    return problem, cp_param, ctr_param, lam_var
+
+
 def _project_clarabel(
     cp: np.ndarray, ctr: np.ndarray, max_iter: int | None,
 ) -> tuple[np.ndarray, float]:
     """Project cp onto cone{lam @ ctr : lam >= 0} via Clarabel; returns (projection, residual norm)."""
+    # drop zero-padded rows
     ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
     if len(ctr) == 0:
         return cp.astype(np.float32), 0.0
-    lam = cvx.Variable(len(ctr), nonneg=True)
-    objective = cvx.Minimize(cvx.sum_squares(cp - lam @ ctr))
-    problem = cvx.Problem(objective)
+    # cached compile per (n_active, num_cost) shape
+    problem, cp_param, ctr_param, lam_var = _build_clarabel_problem(*ctr.shape)
+    cp_param.value = cp
+    ctr_param.value = ctr
     solve_kwargs: dict = {"solver": cvx.CLARABEL}
     if max_iter is not None:
         solve_kwargs["max_iter"] = max_iter
     problem.solve(**solve_kwargs)
-    if lam.value is None:
+    if lam_var.value is None:
         return cp.astype(np.float32), float("inf")
-    p = lam.value @ ctr
-    return p.astype(np.float32), float(problem.value)
+    return (lam_var.value @ ctr).astype(np.float32), float(problem.value)
 
 
 def _project_nnls(
