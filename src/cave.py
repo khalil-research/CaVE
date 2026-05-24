@@ -203,8 +203,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         # Clarabel with truncated iterations already lands strictly inside the cone
         if self.solver == "clarabel":
             return proj_norm.detach()
-        # NNLS solves to the cone boundary, so nudge inside via the average normal,
-        # except for instances already inside (zero residual) which keep the exact projection
+        # NNLS lands on cone boundary; push inside via avg normal, skip if already inside
         pushed = (1 - self.inner_ratio) * proj_norm + self.inner_ratio * avg
         inside = (rnorm < 1e-7).unsqueeze(1)
         return torch.where(inside, proj_norm, pushed).detach()
@@ -273,7 +272,7 @@ def _project_nnls(
     cp: np.ndarray, ctr: np.ndarray, max_iter: int | None,
 ) -> tuple[np.ndarray, float]:
     """Project cp onto cone{lam @ ctr : lam >= 0} via SciPy NNLS; returns (projection, residual norm)."""
-    del max_iter
+    # max_iter unused: nnls iteration cap breaks feasibility
     ctr = ctr[np.abs(ctr).sum(axis=1) > 1e-7]
     if len(ctr) == 0:
         return cp.astype(np.float32), 0.0

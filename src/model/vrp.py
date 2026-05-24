@@ -61,7 +61,9 @@ class vrpABModel(optGrbModel):
 
     @property
     def num_cost(self) -> int:
-        """One cost per undirected edge; ``self.x`` doubles up via ``x[j,i] = x[i,j]`` aliasing."""
+        """
+        number of costs to be predicted
+        """
         return len(self.edges)
 
     def getTour(self, sol: np.ndarray | torch.Tensor | list) -> list[list[int]]:
