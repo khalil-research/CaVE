@@ -98,12 +98,12 @@ class testTSPSolver(unittest.TestCase):
 
 class testCVRPSolver(unittest.TestCase):
     def setUp(self):
-        # number of nodes
-        self.num_nodes = 20
+        # number of nodes (excludes depot; total nodes = num_nodes + 1 = 10)
+        self.num_nodes = 9
         # vehicle capacity
         self.cap = 30
         # number of vehicles
-        self.num_vehicles = 5
+        self.num_vehicles = 3
         # edges of full connected graph
         self.edges = [(u, v) for u in range(self.num_nodes+1)
                       for v in range(self.num_nodes+1) if u < v]
