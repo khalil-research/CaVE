@@ -66,7 +66,9 @@ class abstractConeAlignedCosine(optModule):
         else:
             raise ValueError("Invalid modelSense. Must be EPO.MINIMIZE or EPO.MAXIMIZE.")
         signed_cost = sign * pred_cost
-        proj = self._get_projection(signed_cost, tight_ctrs)
+        # projection is a fixed target; gradient flows only through signed_cost below
+        with torch.no_grad():
+            proj = self._get_projection(signed_cost, tight_ctrs)
         loss = 1.0 - F.cosine_similarity(signed_cost, proj, dim=1)
         return self._reduce(loss)
 
@@ -91,26 +93,30 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
     def __init__(
         self,
         optmodel: optModel,
-        solver: str = "clarabel",
+        solver: str = "apgd",
+        solver_kwargs: dict | None = None,
         processes: int = 1,
         reduction: Reduction = "mean",
     ) -> None:
         """
         Args:
             optmodel: a PyEPO optimization model
-            solver: QP solver for the projection, 'clarabel' (cvxpy) or 'nnls' (scipy)
+            solver: QP solver for the projection, 'apgd' (batched GPU APGD),
+                'clarabel' (cvxpy) or 'nnls' (scipy)
+            solver_kwargs: solver-specific tuning passed through to the backend
             processes: number of processors, 1 for single-core, 0 for all of cores
             reduction: the reduction to apply to the output
         """
         super().__init__(optmodel, processes, reduction)
-        if solver not in ("clarabel", "nnls"):
-            raise ValueError(f"Invalid solver: {solver}. Must be 'clarabel' or 'nnls'.")
+        if solver not in ("apgd", "clarabel", "nnls"):
+            raise ValueError(f"Invalid solver: {solver}. Must be 'apgd', 'clarabel', or 'nnls'.")
         if solver == "clarabel" and not _HAS_CVXPY:
             raise ImportError(
                 "cvxpy is not installed. Install with `pip install 'cvxpy[clarabel]'` "
-                "to use the 'clarabel' solver, or pass solver='nnls'."
+                "to use the 'clarabel' solver, or pass solver='apgd' or 'nnls'."
             )
         self.solver = solver
+        self.solver_kwargs = solver_kwargs or {}
 
     def _get_projection(
         self, signed_cost: torch.Tensor, tight_ctrs: torch.Tensor,
@@ -118,6 +124,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         proj, _ = _batch_project(
             signed_cost, tight_ctrs, self.solver, max_iter=None,
             processes=self.processes, pool=self.pool,
+            solver_kwargs=self.solver_kwargs,
         )
         return proj / proj.norm(dim=1, keepdim=True).clamp(min=1e-8)
 
@@ -135,10 +142,18 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
     Reference: <https://link.springer.com/chapter/10.1007/978-3-031-60599-4_12>
     """
 
+    # default truncation kwargs per solver for inner mode
+    _INNER_DEFAULTS: dict[str, dict] = {
+        "apgd": {"max_iters": 20, "tol_grad": None},
+        "clarabel": {},  # truncation via self.max_iter
+        "nnls": {},      # truncation via post-solve push-inside
+    }
+
     def __init__(
         self,
         optmodel: optModel,
-        solver: str = "clarabel",
+        solver: str = "apgd",
+        solver_kwargs: dict | None = None,
         max_iter: int = 3,
         solve_ratio: float = 1.0,
         inner_ratio: float = 0.2,
@@ -149,7 +164,9 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         """
         Args:
             optmodel: a PyEPO optimization model
-            solver: QP solver for the projection, 'clarabel' (cvxpy) or 'nnls' (scipy)
+            solver: QP solver for the projection, 'apgd' (batched GPU APGD),
+                'clarabel' (cvxpy) or 'nnls' (scipy)
+            solver_kwargs: solver-specific tuning passed through to the backend
             max_iter: Clarabel iteration budget for the inner-truncated projection
             solve_ratio: probability per batch of running the QP projection;
                 with complementary probability the cheap heuristic branch is taken
@@ -159,7 +176,10 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
             reduction: the reduction to apply to the output
             seed: seed for the per-batch QP-vs-heuristic branch RNG
         """
-        super().__init__(optmodel, solver, processes, reduction)
+        # inner mode auto-injects solver-appropriate truncation when user gives none
+        if solver_kwargs is None:
+            solver_kwargs = dict(self._INNER_DEFAULTS.get(solver, {}))
+        super().__init__(optmodel, solver, solver_kwargs, processes, reduction)
         if not 0 <= solve_ratio <= 1:
             raise ValueError(
                 f"Invalid solve_ratio {solve_ratio}. It should be between 0 and 1."
@@ -181,20 +201,21 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         # heuristic branch: skip the QP, convex-combine pred with the average normal
         if self._branch_rng.uniform() > self.solve_ratio:
             pred_norm = signed_cost / signed_cost.norm(dim=1, keepdim=True).clamp(min=1e-8)
-            return ((1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg).detach()
+            return (1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg
         # QP branch with truncated iterations
         proj, rnorm = _batch_project(
             signed_cost, tight_ctrs, self.solver, max_iter=self.max_iter,
             processes=self.processes, pool=self.pool,
+            solver_kwargs=self.solver_kwargs,
         )
         proj_norm = proj / proj.norm(dim=1, keepdim=True).clamp(min=1e-8)
-        # Clarabel with truncated iterations already lands strictly inside the cone
-        if self.solver == "clarabel":
-            return proj_norm.detach()
+        # Clarabel / APGD truncated iterations already lands inside the cone
+        if self.solver in ("clarabel", "apgd"):
+            return proj_norm
         # NNLS lands on cone boundary; push inside via avg normal, skip if already inside
         pushed = (1 - self.inner_ratio) * proj_norm + self.inner_ratio * avg
         inside = (rnorm < 1e-7).unsqueeze(1)
-        return torch.where(inside, proj_norm, pushed).detach()
+        return torch.where(inside, proj_norm, pushed)
 
 
 def _average_ctrs(tight_ctrs: torch.Tensor) -> torch.Tensor:
@@ -213,8 +234,14 @@ def _batch_project(
     max_iter: int | None,
     processes: int,
     pool,
+    solver_kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Map per-instance cone projections; returns (proj, rnorm) on signed_cost's device."""
+    # batched dense path for apgd
+    if solver == "apgd":
+        from src.qpsolver import project_apgd
+        return project_apgd(tight_ctrs, signed_cost, **(solver_kwargs or {}))
+    # per-instance path for clarabel / nnls
     device, dtype = signed_cost.device, signed_cost.dtype
     cp_np = signed_cost.detach().cpu().numpy()
     ctrs_np = tight_ctrs.detach().cpu().numpy()
@@ -224,7 +251,7 @@ def _batch_project(
     elif solver == "nnls":
         worker = _project_nnls
     else:
-        raise ValueError(f"Invalid solver: {solver}. Must be 'clarabel' or 'nnls'.")
+        raise ValueError(f"Invalid solver: {solver}. Must be 'apgd', 'clarabel', or 'nnls'.")
     if processes == 1:
         results = [worker(cp_np[i], ctrs_np[i], max_iter) for i in range(batch)]
     else:
