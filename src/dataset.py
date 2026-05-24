@@ -1,205 +1,233 @@
 #!/usr/bin/env python
-# coding: utf-8
 """
-optDataset class to obtain tight constraints
+optDataset with binding-constraint extraction for CaVE
 """
 
-import time
+from __future__ import annotations
 
-from gurobipy import GRB
+import logging
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
+from gurobipy import GRB
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
-from pyepo.model.opt import optModel
 from pyepo.data.dataset import optDataset
+from pyepo.model.opt import optModel
+
+if TYPE_CHECKING:
+    pass
+
+logger = logging.getLogger(__name__)
 
 
 class optDatasetConstrs(optDataset):
     """
-    This class is Torch Dataset for optimization problems with binding constraints.
+    This class is a Torch Dataset for optimization problems with the normals
+    of binding constraints at the optimum.
+
+    Reference: <https://link.springer.com/chapter/10.1007/978-3-031-60599-4_12>
 
     Attributes:
-        model (optModel): Optimization models
-        feats (np.ndarray): Data features
-        costs (np.ndarray): Cost vectors
-        sols (np.ndarray): Optimal solutions
-        ctrs (list(np.ndarray)): active constraints
+        model (optModel): Optimization model
+        feats (torch.Tensor): Data features
+        costs (torch.Tensor): Cost vectors
+        sols (torch.Tensor): Optimal solutions
+        objs (torch.Tensor): Optimal objective values
+        ctrs (list[torch.Tensor]): Per-instance binding-constraint normals
     """
-    def __init__(self, model, feats, costs, skip_infeas=False):
+
+    def __init__(
+        self,
+        model: optModel,
+        feats: np.ndarray | torch.Tensor,
+        costs: np.ndarray | torch.Tensor,
+        skip_infeas: bool = False,
+    ) -> None:
         """
-        A method to create a optDataset from optModel
+        A method to create an optDatasetConstrs from optModel
 
         Args:
-            model (optModel): an instance of optModel
-            feats (np.ndarray): data features
-            costs (np.ndarray): costs of objective function
-            skip_infeas (bool): if True, skip infeasible data points
+            model: an instance of optModel
+            feats: data features
+            costs: costs of objective function
+            skip_infeas: if True, drop infeasible instances instead of raising
         """
         if not isinstance(model, optModel):
             raise TypeError("arg model is not an optModel")
         self.model = model
-        # drop infeasibe or get error
         self.skip_infeas = skip_infeas
         # data
         self.feats = feats
         self.costs = costs
-        self.sols, self.objs, self.ctrs = self._getSols()
+        # find optimal solutions and binding constraints
+        sols, objs, ctrs, valid = self._getSols()
+        # pre-convert to tensors (on CPU) to avoid repeated numpy→tensor copies
+        self.feats = torch.as_tensor(self.feats[valid], dtype=torch.float32)
+        self.costs = torch.as_tensor(self.costs[valid], dtype=torch.float32)
+        self.sols = torch.as_tensor(sols, dtype=torch.float32)
+        self.objs = torch.as_tensor(objs, dtype=torch.float32)
+        self.ctrs = [torch.as_tensor(c, dtype=torch.float32) for c in ctrs]
 
-    def _getSols(self):
+    def _getSols(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], list[int]]:
         """
-        A method to get optimal solutions for all cost vectors
+        A method to get optimal solutions and binding-constraint normals
         """
-        sols, objs, ctrs, valid_ind = [], [], [], []
-        print("Optimizing for optDataset...")
-        time.sleep(1)
-        tbar = tqdm(self.costs)
-        for i, c in enumerate(tbar):
-            try:
-                # solve
-                sol, obj, model = self._solve(c)
-                # get binding constrs
-                constrs = self._getBindingConstrs(model)
-            except AttributeError as e:
-                # infeasibe
+        sols: list[np.ndarray] = []
+        objs: list[list[float]] = []
+        ctrs: list[np.ndarray] = []
+        valid: list[int] = []
+        logger.info("Optimizing for optDatasetConstrs...")
+        for i, c in enumerate(tqdm(self.costs)):
+            # fresh per-instance copy keeps the lazy-constraint buffer clean
+            model = self.model.copy()
+            model.setObj(c)
+            sol, obj = model.solve()
+            # infeasibility check
+            if model._model.Status != GRB.OPTIMAL:
                 if self.skip_infeas:
-                    # skip this data point
-                    tbar.write("No feasible solution! Drop instance {}.".format(i))
+                    logger.warning(
+                        "Instance %d non-optimal (Status=%d), skipping.",
+                        i, model._model.Status,
+                    )
                     continue
-                else:
-                    # raise the exception
-                    raise ValueError("No feasible solution!")
-            sols.append(sol)
-            objs.append([obj])
-            ctrs.append(np.array(constrs))
-            valid_ind.append(i)
-        # update feats and costs to keep only valid entries
-        self.feats = self.feats[valid_ind]
-        self.costs = self.costs[valid_ind]
-        return np.array(sols), np.array(objs), ctrs
+                raise ValueError(
+                    f"Instance {i} did not solve to optimality "
+                    f"(Gurobi Status={model._model.Status})."
+                )
+            sols.append(np.asarray(sol))
+            objs.append([float(obj)])
+            ctrs.append(_extract_tight_normals(model, sol))
+            valid.append(i)
+        return np.stack(sols), np.asarray(objs), ctrs, valid
 
-    def _solve(self, cost):
-        """
-        A method to solve optimization problem to get an optimal solution with given cost
-
-        Args:
-            cost (np.ndarray): cost of objective function
-
-        Returns:
-            tuple: optimal solution (np.ndarray) and objective value (float)
-        """
-        # copy model
-        model = self.model.copy()
-        # set obj
-        model.setObj(cost)
-        # optimize
-        sol, obj = model.solve()
-        return sol, obj, model
-
-    def _getBindingConstrs(self, model):
-        """
-        A method to get tight constraints with current solution
-
-        Args:
-            model (optModel): optimization models
-
-        Returns:
-            np.ndarray: normal vector of constraints
-        """
-        xs = model._model.getVars()
-        constrs = []
-        # if there is lazy constraints
-        if hasattr(model, "lazy_constrs"):
-            # add lazy constrs to model
-            for constr in model.lazy_constrs:
-                model._model.addConstr(constr)
-            # fix the variables to the optimal
-            for var in model._model.getVars():
-                var.start = int(var.x)
-            # update model
-            model._model.update()
-            # solve
-            model.solve()
-        # iterate all constraints
-        for constr in model._model.getConstrs():
-            # check binding constraints A x == b
-            if abs(constr.Slack) < 1e-5:
-                t_constr = []
-                # get coefficients
-                for x in xs:
-                    t_constr.append(model._model.getCoeff(constr, x))
-                # get coefficients with correct direction
-                if constr.sense == GRB.LESS_EQUAL:
-                    # <=
-                    constrs.append(t_constr)
-                elif constr.sense == GRB.GREATER_EQUAL:
-                    # >=
-                    constrs.append([- coef for coef in t_constr])
-                elif constr.sense == GRB.EQUAL:
-                    # ==
-                    constrs.append(t_constr)
-                    constrs.append([- coef for coef in t_constr])
-                else:
-                    # invalid sense
-                    raise ValueError("Invalid constraint sense.")
-        # iterate all variables to check bounds
-        for i, x in enumerate(xs):
-            t_constr = [0] * len(xs)
-            # add tight bounds as cosnrtaints
-            if x.x <= 1e-5:
-                # x_i >= 0
-                t_constr[i] = - 1
-                constrs.append(t_constr)
-            elif x.x >= 1 - 1e-5:
-                # x_i <= 1
-                t_constr[i] = 1
-                constrs.append(t_constr)
-        return constrs
-
-    def __len__(self):
+    def __len__(self) -> int:
         """
         A method to get data size
-
-        Returns:
-            int: the number of optimization problems
         """
         return len(self.feats)
 
-    def __getitem__(self, index):
+    def __getitem__(
+        self, index: int,
+    ) -> tuple[torch.Tensor, ...]:
         """
         A method to retrieve data
 
-        Args:
-            index (int): data index
-
         Returns:
-            tuple: data features (torch.tensor),
-                   costs (torch.tensor),
-                   optimal solutions (torch.tensor),
-                   objective values (torch.tensor)
+            tuple: features, costs, optimal solution, optimal objective,
+            binding-constraint normals
         """
         return (
-                torch.FloatTensor(self.feats[index]),
-                torch.FloatTensor(self.costs[index]),
-                torch.FloatTensor(self.sols[index]),
-                torch.FloatTensor(self.objs[index]),
-                torch.FloatTensor(self.ctrs[index])
-            )
+            self.feats[index],
+            self.costs[index],
+            self.sols[index],
+            self.objs[index],
+            self.ctrs[index],
+        )
 
 
 def collate_fn(batch):
     """
-    A custom collate function for PyTorch DataLoader.
+    A custom collate function for PyTorch DataLoader that pads binding-constraint matrices
     """
-    # seperate batch data
     x, c, w, z, t_ctrs = zip(*batch)
-    # stack lists of x, c, and w into new batch tensors
-    x = torch.stack(x, dim=0)
-    c = torch.stack(c, dim=0)
-    w = torch.stack(w, dim=0)
-    z = torch.stack(z, dim=0)
-    # pad t_ctrs with 0 to make all sequences have the same length.
-    # the number of binding constraints are different.
-    ctrs_padded = pad_sequence(t_ctrs, batch_first=True, padding_value=0)
-    return x, c, w, z, ctrs_padded
+    return (
+        torch.stack(x, dim=0),
+        torch.stack(c, dim=0),
+        torch.stack(w, dim=0),
+        torch.stack(z, dim=0),
+        pad_sequence(t_ctrs, batch_first=True, padding_value=0),
+    )
+
+
+def _extract_tight_normals(
+    model: optModel, sol: np.ndarray, tol: float = 1e-5,
+) -> np.ndarray:
+    """
+    A function to extract normals of binding constraints at sol in canonical <= orientation
+    """
+    grb = model._model
+    cost_vars: list = model._cost_vars
+    num_cost = len(cost_vars)
+    sol_np = np.asarray(sol, dtype=np.float64)
+    rows: list[np.ndarray] = []
+    # explicit constraints
+    constrs = grb.getConstrs()
+    if constrs:
+        slacks = np.asarray(grb.getAttr("Slack", constrs))
+        senses = grb.getAttr("Sense", constrs)
+        tight_mask = np.abs(slacks) < tol
+        if tight_mask.any():
+            # project the constraint matrix onto cost-variable columns
+            cost_col_idx = np.asarray([v.index for v in cost_vars])
+            A = grb.getA().tocsr()
+            A_cost = A[:, cost_col_idx]
+            for row_idx in np.where(tight_mask)[0]:
+                row = A_cost[row_idx].toarray().ravel()
+                rows.extend(_orient_row(row, senses[row_idx]))
+    # lazy constraints: evaluate LHS at the optimum to derive slack
+    var_to_cost: dict[str, int] = {v.VarName: k for k, v in enumerate(cost_vars)}
+    for tc in getattr(grb, "_lazy_constrs", []):
+        coefs, rhs, sense = _temp_constr_to_cost_row(tc, var_to_cost, num_cost)
+        if coefs is None:
+            continue
+        lhs_val = float(coefs @ sol_np)
+        if abs(rhs - lhs_val) < tol:
+            rows.extend(_orient_row(coefs, sense))
+    # binary variable bounds
+    for k in range(num_cost):
+        # tight at 0: -x_k <= 0
+        if sol_np[k] <= tol:
+            row = np.zeros(num_cost, dtype=np.float64)
+            row[k] = -1.0
+            rows.append(row)
+        # tight at 1: x_k <= 1
+        elif sol_np[k] >= 1 - tol:
+            row = np.zeros(num_cost, dtype=np.float64)
+            row[k] = 1.0
+            rows.append(row)
+    # empty fallback
+    if not rows:
+        return np.zeros((0, num_cost), dtype=np.float32)
+    return np.asarray(rows, dtype=np.float32)
+
+
+def _orient_row(row: np.ndarray, sense: str) -> list[np.ndarray]:
+    """Return constraint rows in canonical ``<=`` orientation."""
+    # <=
+    if sense == GRB.LESS_EQUAL:
+        return [row]
+    # >= negated to <=
+    if sense == GRB.GREATER_EQUAL:
+        return [-row]
+    # == split into <= and >=
+    if sense == GRB.EQUAL:
+        return [row, -row]
+    raise ValueError(f"Invalid constraint sense {sense!r}.")
+
+
+def _temp_constr_to_cost_row(
+    tc, var_to_cost: dict[str, int], num_cost: int,
+) -> tuple[np.ndarray | None, float | None, str | None]:
+    """
+    Parse a Gurobi TempConstr into (coefs, rhs, sense) over the cost-vector dim
+    """
+    # TempConstr internals
+    lhs = getattr(tc, "_lhs", None)
+    rhs = getattr(tc, "_rhs", None)
+    sense = getattr(tc, "_sense", None)
+    # unparseable fallback
+    if lhs is None or rhs is None or sense is None:
+        return None, None, None
+    # project LinExpr terms onto cost-vector dim
+    coefs = np.zeros(num_cost, dtype=np.float64)
+    for i in range(lhs.size()):
+        var = lhs.getVar(i)
+        k = var_to_cost.get(var.VarName)
+        if k is not None:
+            coefs[k] += lhs.getCoeff(i)
+    return coefs, float(rhs), sense
