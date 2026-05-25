@@ -197,22 +197,23 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
     def _get_projection(
         self, signed_cost: torch.Tensor, tight_ctrs: torch.Tensor,
     ) -> torch.Tensor:
-        avg = _average_ctrs(tight_ctrs)
-        # heuristic branch: skip the QP, convex-combine pred with the average normal
+        # heuristic branch
         if self._branch_rng.uniform() > self.solve_ratio:
             pred_norm = signed_cost / signed_cost.norm(dim=1, keepdim=True).clamp(min=1e-8)
+            avg = _average_ctrs(tight_ctrs)
             return (1 - self.inner_ratio) * pred_norm + self.inner_ratio * avg
-        # QP branch with truncated iterations
+        # QP branch
         proj, rnorm = _batch_project(
             signed_cost, tight_ctrs, self.solver, max_iter=self.max_iter,
             processes=self.processes, pool=self.pool,
             solver_kwargs=self.solver_kwargs,
         )
         proj_norm = proj / proj.norm(dim=1, keepdim=True).clamp(min=1e-8)
-        # Clarabel / APGD truncated iterations already lands inside the cone
+        # truncated -> inside cone (clarabel / apgd)
         if self.solver in ("clarabel", "apgd"):
             return proj_norm
-        # NNLS lands on cone boundary; push inside via avg normal, skip if already inside
+        # nnls: push inside via avg
+        avg = _average_ctrs(tight_ctrs)
         pushed = (1 - self.inner_ratio) * proj_norm + self.inner_ratio * avg
         inside = (rnorm < 1e-7).unsqueeze(1)
         return torch.where(inside, proj_norm, pushed)
@@ -224,7 +225,7 @@ def _average_ctrs(tight_ctrs: torch.Tensor) -> torch.Tensor:
     valid = (norms > 1e-7).to(tight_ctrs.dtype)
     unit = tight_ctrs / norms.clamp(min=1e-8) * valid
     n_valid = valid.sum(dim=1).clamp(min=1.0)
-    return (unit.sum(dim=1) / n_valid).detach()
+    return unit.sum(dim=1) / n_valid
 
 
 def _batch_project(
