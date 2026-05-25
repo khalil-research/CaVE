@@ -35,8 +35,8 @@ There is a talk on our paper at the CPAIOR 2024 conference. You can view the sli
 
 The cone projection has three backends, selectable via the `solver` argument:
 
-- **`'clarabel'`** (default): Interior-point QP solver from [Clarabel](https://oxfordcontrol.github.io/ClarabelDocs/) (via cvxpy). With `max_iter=3` (the `innerConeAlignedCosine` default) it lands strictly inside the cone via the interior-point trajectory and reproduces the paper's CaVE+ regret.
-- **`'nnls'`**: Exact non-negative least squares from SciPy plus a push-inside step (`inner_ratio`). Paper-faithful CPU fallback when cvxpy/Clarabel is unavailable.
+- **`'clarabel'`** (default): Interior-point QP solver [Clarabel](https://oxfordcontrol.github.io/ClarabelDocs/). Under-converging it with a low `max_iter` keeps the projection interior to the cone (the paper's CaVE+ trick), which `innerConeAlignedCosine` uses with `max_iter=3` by default.
+- **`'nnls'`**: Exact non-negative least squares from SciPy plus a push-inside step (`inner_ratio`). Paper-faithful CPU fallback when Clarabel is unavailable.
 - **`'apgd'`** (experimental): Batched Nesterov-accelerated projected gradient descent. Runs the entire batch as one dense GPU operation via `torch.compile`. Fast for forward-only projection on small problems, but the tight step-size + FISTA momentum combination is numerically unstable past roughly 200 iterations on cone-projection problems with many active constraints, and end-to-end training can diverge to NaN on larger TSP instances. Treat as experimental.
 
 ## Dependencies
@@ -82,7 +82,7 @@ The ``innerConeAlignedCosine`` class is an autograd module for computing the **C
 #### Parameters
 
 - `optmodel` (`optModel`): An instance of the PyEPO optimization model.
-- `solver` (`str`, optional): The QP solver for the projection. Options are `'clarabel'` (cvxpy, default), `'nnls'` (scipy), and `'apgd'` (experimental). The Clarabel default with `max_iter=3` lands strictly inside the cone via the interior-point trajectory and reproduces the paper's CaVE+ regret.
+- `solver` (`str`, optional): The QP solver for the projection. Options are `'clarabel'` (default), `'nnls'` (scipy), and `'apgd'` (experimental). See the **Solver Backends** section above.
 - `solver_kwargs` (`dict`, optional): Backend-specific tuning passed through to the solver. The default is `None`.
 - `max_iter` (`int`, optional): The maximum Clarabel iterations for the inner-truncated projection. The default is `3`.
 - `solve_ratio` (`float`, optional): The probability per batch of running the QP projection. Ranges from `0` to `1`. The default is `1`.
