@@ -31,21 +31,13 @@ There is a talk on our paper at the CPAIOR 2024 conference. You can view the sli
 - **End-to-End:** The loss function of CaVE focuses on decision quality.
 - **Efficiency:** The algorithm of CaVE utilizes non-negative least squares (NNLSs) instead of solving BLPs.
 
-## What's New: Batched GPU APGD Solver
+## Solver Backends
 
-A new solver `'apgd'` (Nesterov-Accelerated Projected Gradient Descent) is now the **default backend**. It batches the cone projection across the entire batch as a single dense GPU operation via `torch.compile`, eliminating per-instance solver overhead.
+The cone projection has three backends, selectable via the `solver` argument:
 
-### Speedup vs Clarabel (forward + backward, batch=32, RTX 5080)
-
-| Problem shape | APGD GPU (new) | Clarabel CPU cached | NNLS CPU | Speedup vs Clarabel |
-|---|---|---|---|---|
-| n=28, m=56 (small) | **1.8 ms** | 34.5 ms | 20.2 ms | **19×** |
-| n=45, m=66 (TSP-10) | **1.4 ms** | 53.1 ms | 27.4 ms | **36×** |
-| n=91, m=121 (TSP-15) | **1.7 ms** | 613 ms | 100.9 ms | **365×** |
-
-APGD throughput stays roughly constant with problem size while interior-point methods scale poorly.
-
-The legacy `'clarabel'` and `'nnls'` solvers remain available for reproducibility — pass `solver='clarabel'` or `solver='nnls'` to either loss module.
+- **`'clarabel'`** (default): Interior-point QP solver from [Clarabel](https://oxfordcontrol.github.io/ClarabelDocs/) (via cvxpy). With `max_iter=3` (the `innerConeAlignedCosine` default) it lands strictly inside the cone via the interior-point trajectory and reproduces the paper's CaVE+ regret.
+- **`'nnls'`**: Exact non-negative least squares from SciPy plus a push-inside step (`inner_ratio`). Paper-faithful CPU fallback when cvxpy/Clarabel is unavailable.
+- **`'apgd'`** (experimental): Batched Nesterov-accelerated projected gradient descent. Runs the entire batch as one dense GPU operation via `torch.compile`. Fast for forward-only projection on small problems, but the tight step-size + FISTA momentum combination is numerically unstable past roughly 200 iterations on cone-projection problems with many active constraints, and end-to-end training can diverge to NaN on larger TSP instances. Treat as experimental.
 
 ## Dependencies
 
@@ -78,8 +70,8 @@ The ``exactConeAlignedCosine`` class is an autograd module for computing the **C
 #### Parameters
 
 - `optmodel` (`optModel`): An instance of the PyEPO optimization model.
-- `solver` (`str`, optional): The QP solver for the projection. Options include `'apgd'` (batched GPU APGD), `'clarabel'` (cvxpy) and `'nnls'` (scipy). The default is `'apgd'`.
-- `solver_kwargs` (`dict`, optional): Backend-specific tuning passed through to the solver (e.g. `{'max_iters': 200, 'tol_grad': 1e-3}` for APGD). The default is `None` (use solver defaults).
+- `solver` (`str`, optional): The QP solver for the projection. Options are `'clarabel'` (cvxpy, default), `'nnls'` (scipy), and `'apgd'` (experimental batched GPU). See the **Solver Backends** section above.
+- `solver_kwargs` (`dict`, optional): Backend-specific tuning passed through to the solver. The default is `None` (use solver defaults).
 - `reduction` (`str`, optional): The reduction to apply to the output. Options include `'mean'`, `'sum'`, and `'none'`. The default is `'mean'`.
 - `processes` (`int`, optional): Number of processors. `1` is for single-core, and `0` is for using all cores. The default is `1`.
 
@@ -90,8 +82,8 @@ The ``innerConeAlignedCosine`` class is an autograd module for computing the **C
 #### Parameters
 
 - `optmodel` (`optModel`): An instance of the PyEPO optimization model.
-- `solver` (`str`, optional): The QP solver for the projection. Options include `'apgd'`, `'clarabel'` and `'nnls'`. The default is `'apgd'`.
-- `solver_kwargs` (`dict`, optional): Backend-specific tuning. When `None` (default) and `solver='apgd'`, inner mode auto-injects `{'max_iters': 20, 'tol_grad': None}` for truncated APGD (lands inside the cone).
+- `solver` (`str`, optional): The QP solver for the projection. Options are `'clarabel'` (cvxpy, default), `'nnls'` (scipy), and `'apgd'` (experimental). The Clarabel default with `max_iter=3` lands strictly inside the cone via the interior-point trajectory and reproduces the paper's CaVE+ regret.
+- `solver_kwargs` (`dict`, optional): Backend-specific tuning passed through to the solver. The default is `None`.
 - `max_iter` (`int`, optional): The maximum Clarabel iterations for the inner-truncated projection. The default is `3`.
 - `solve_ratio` (`float`, optional): The probability per batch of running the QP projection. Ranges from `0` to `1`. The default is `1`.
 - `inner_ratio` (`float`, optional): The weight to push the heuristic projection inside. Ranges from `0` to `1`. The default is `0.2`.
@@ -144,7 +136,7 @@ dataset = optDatasetConstrs(optmodel, feats, costs)
 # get data loader
 dataloader = DataLoader(dataset, batch_size=32, collate_fn=collate_fn, shuffle=True)
 
-# init loss (solver defaults to 'apgd' for batched GPU projection)
+# init loss (solver defaults to 'clarabel')
 cave = innerConeAlignedCosine(optmodel, processes=1)
 # set optimizer
 optimizer = torch.optim.Adam(reg.parameters(), lr=1e-2)

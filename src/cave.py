@@ -93,7 +93,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
     def __init__(
         self,
         optmodel: optModel,
-        solver: str = "apgd",
+        solver: str = "clarabel",
         solver_kwargs: dict | None = None,
         processes: int = 1,
         reduction: Reduction = "mean",
@@ -101,8 +101,8 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         """
         Args:
             optmodel: a PyEPO optimization model
-            solver: QP solver for the projection, 'apgd' (batched GPU APGD),
-                'clarabel' (cvxpy) or 'nnls' (scipy)
+            solver: ``'clarabel'`` (cvxpy, default), ``'nnls'`` (scipy), or
+                ``'apgd'`` (experimental batched GPU)
             solver_kwargs: solver-specific tuning passed through to the backend
             processes: number of processors, 1 for single-core, 0 for all of cores
             reduction: the reduction to apply to the output
@@ -113,7 +113,7 @@ class exactConeAlignedCosine(abstractConeAlignedCosine):
         if solver == "clarabel" and not _HAS_CVXPY:
             raise ImportError(
                 "cvxpy is not installed. Install with `pip install 'cvxpy[clarabel]'` "
-                "to use the 'clarabel' solver, or pass solver='apgd' or 'nnls'."
+                "to use the 'clarabel' solver, or pass solver='nnls' or solver='apgd'."
             )
         self.solver = solver
         self.solver_kwargs = solver_kwargs or {}
@@ -144,7 +144,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
 
     # default truncation kwargs per solver for inner mode
     _INNER_DEFAULTS: dict[str, dict] = {
-        "apgd": {"max_iters": 20, "tol_grad": None},
+        "apgd": {"max_iters": 200, "tol_grad": None},
         "clarabel": {},  # truncation via self.max_iter
         "nnls": {},      # truncation via post-solve push-inside
     }
@@ -152,7 +152,7 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
     def __init__(
         self,
         optmodel: optModel,
-        solver: str = "apgd",
+        solver: str = "clarabel",
         solver_kwargs: dict | None = None,
         max_iter: int = 3,
         solve_ratio: float = 1.0,
@@ -164,8 +164,8 @@ class innerConeAlignedCosine(exactConeAlignedCosine):
         """
         Args:
             optmodel: a PyEPO optimization model
-            solver: QP solver for the projection, 'apgd' (batched GPU APGD),
-                'clarabel' (cvxpy) or 'nnls' (scipy)
+            solver: ``'clarabel'`` (cvxpy, default), ``'nnls'`` (scipy), or
+                ``'apgd'`` (experimental batched GPU)
             solver_kwargs: solver-specific tuning passed through to the backend
             max_iter: Clarabel iteration budget for the inner-truncated projection
             solve_ratio: probability per batch of running the QP projection;
