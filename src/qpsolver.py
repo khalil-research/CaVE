@@ -68,9 +68,8 @@ def _power_iter_step_size(
 ) -> torch.Tensor:
     """A function to estimate per-instance 1/lambda_max(A A^T) via power iteration"""
     B, m, _ = A.shape
-    # random init + unit normalize
-    v = torch.randn(B, m, device=A.device, dtype=A.dtype)
-    v = v / v.norm(dim=1, keepdim=True).clamp(min=1e-8)
+    # deterministic unit-norm init for reproducibility
+    v = torch.full((B, m), 1.0 / (m ** 0.5), device=A.device, dtype=A.dtype)
     # power iteration: v <- (A A^T) v
     for _ in range(n_iter):
         u = torch.bmm(AT, v.unsqueeze(-1)).squeeze(-1)
